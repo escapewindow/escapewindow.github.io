@@ -1,0 +1,133 @@
+---
+layout: post
+title: 'LWR (job scheduling) part iii: hand-wavy specifics, and what we can roll out
+  in phase 1'
+---
+
+<a name="preface"></a>
+<table style="border: thin solid #000033" border="0" cellspacing="0" width="100%"><tr><td style="padding: 1em;">
+<p>
+<b>preface</b>
+</p><p>
+Since I wrote my <a href="http://escapewindow.dreamwidth.org/243117.html">previous blog post on LWR</a>, I've found/been sent/been reminded of a few links:
+</p><ul style="list-style-type: circle;"><li style="margin-bottom: 1em;">
+Automating away operations in production deployments:
+</li><ul style="list-style-type: disc;"><li style="margin-bottom: 1em;">
+Todd Underwood, SRE @ Google - <a href="https://www.usenix.org/conference/lisa13/technical-sessions/plenary/underwood">PostOps: A Non-Surgical Tale of Software, Fragility, and Reliability</a>
+</li><li style="margin-bottom: 1em;">
+Adrian Cockcroft, Cloud Architect @ NetFlix - <a href="http://perfcap.blogspot.com/2012/03/ops-devops-and-noops-at-netflix.html">Ops, DevOps and PaaS (NoOps) at Netflix</a>
+</li></ul><li style="margin-bottom: 1em;">
+Other job scheduling systems, which I plan on digging into later.  These may or may not work for us:
+</li><ul style="list-style-type: disc;"><li style="margin-bottom: 1em;">
+From <a href="http://escapewindow.dreamwidth.org/243117.html?thread=455853#cmt455853">comments in my previous blog post</a>, <a href="http://en.wikipedia.org/wiki/JobScheduler">JobScheduler</a>, which may or may not scale to the degree we would need it to.
+</li><li style="margin-bottom: 1em;">
+And <a href="http://strata.oreilly.com/2013/09/running-batch-and-long-running-highly-available-service-jobs-on-the-same-cluster.html">this article</a> that talks about Google Borg and Apache Mesos based solutions, which definitely can scale.  It's not immediately clear to me if the compute cluster model lends itself to a heterogeneous compute farm where it's mandatory we be able to target specific nodes for specific tasks (as opposed to finding free resources of any type).  It's also unclear at first blush whether they would lend themselves to Windows, OSX, ARM device, or other hardware-based nodes, or are explicitly linux/cloud specific.
+</li></ul></ul><p>
+I'm going to keep writing this third LWR blog post as planned, since I think we failed to explain things clearly to our newer team members during the team week.  Also, recording our recent brainstorming may help us decide if these other scheduling systems would work for us, and help guide any customizations we may want to make, should we choose to use them.
+</p>
+</td></tr></table><br />
+
+<a name="whiteboard_schematics"></a>
+<table style="border: thin solid #000033" border="0" cellspacing="0" width="100%"><tr><td style="padding: 1em;">
+<p>
+<b>whiteboard schematics</b>
+</p><center>
+<a href="http://darksecretlove.com/images/lj/2013/lwr_whiteboard.jpg"><img src="http://darksecretlove.com/images/lj/2013/lwr_whiteboard.jpg" style="border: thick solid black;" width="300" /></a><br />
+<small>the drawing is either really important, or just a brainstorm first draft. i'm not sure which yet.</small>
+</center><br /><dl><dt>
+event api
+</dt><dd style="margin-bottom: 1em;">
+This would allow specific events to trigger pre-defined behavior.  New push, new graph, job start, job finish, timer.
+</dd><dt>
+lwr config
+</dt><dd style="margin-bottom: 1em;">
+This would specify the above pre-defined behavior, as well as some timers for nightly/periodic/scheduled tasks.
+</dd><dt>
+graph api
+</dt><dd style="margin-bottom: 1em;">
+This would allow for reading/inserting/updating dependency graphs into the system.
+</dd><dt>
+event processor
+</dt><dd style="margin-bottom: 1em;">
+This would trigger graph generation and graph processing jobs during phase 1.
+</dd><dt>
+web app
+</dt><dd style="margin-bottom: 1em;">
+As described <a href="http://escapewindow.dreamwidth.org/243117.html#web_app">here</a>; most likely only a subset of those features would exist in phase 1.
+</dd><dt>
+graphs db
+</dt><dd style="margin-bottom: 1em;">
+This would hold the graphs and jobs.  (We might want a different name than 'graphs' for this db, to avoid confusion with <a href="http://graphs.mozilla.org/graph.html">graphserver</a>.)
+</dd><dt>
+graph generation pool
+</dt><dd style="margin-bottom: 1em;">
+This would generate the graphs using pre-defined defaults.  We'd like the defaults for the build/test graphs to live in-tree.  We would potentially need TryChooser, per-product (only kick off certain builds depending on which files have been changed), and other customization logic here.
+</dd><dt>
+graph processing pool
+</dt><dd style="margin-bottom: 1em;">
+This would read the graphs and determine the next steps.  Dependency status checking, triggering next jobs when appropriate, marking the rest of the graph as skipped/timed out/etc if needed.
+</dd></dl><p>
+We'd like to keep the server-side as dumb as possible.  The fewer changes that need to be made there, the more stable it will be.  By moving logic and configs off the server, we can make more complex and granular changes without touching the servers.  We've already seen the effects of keeping all the logic, all the configs, all the scheduling on the buildbot masters, and we want the opposite.
+</p><p>
+We'd like a small server to be runnable on a single machine, so we can test and debug changes on our laptops.  Versioned- or backwards-compatible APIs may allow us to upgrade half a production cluster, bring that live, then upgrade the second half.  If we're easily able to spin up a new standalone cluster, we can easily support different workflows/audiences like staging-vs-production, standalone project branch "pods", or experimental small project support.
+</p>
+</td></tr></table><br />
+
+<a name="slaveapi_mozpool_and_network_logging"></a>
+<table style="border: thin solid #000033" border="0" cellspacing="0" width="100%"><tr><td style="padding: 1em;">
+<p>
+<b>slaveapi, mozpool, and network logging</b>
+</p><p>
+Currently, buildbot has a list of buildslaves per builder, and keeps track of which ones are currently connected to the buildbot master.  <a href="http://atlee.ca/blog/">:catlee</a> then tweaks the nextSlave logic to prefer faster buildslaves over slower, or spot instances over reserved instances (or to use reserved instances if the same job was run on an interrupted spot instance), or the last buildslave that successfully ran that particular job (to improve depend build times).  Buildbot doesn't have any concept of how healthy the buildslave is, or how to maintain the buildslaves, and requires that we make any pooling or nextSlave decisions ahead of time and load them into the running buildbot masters via a reconfig.  Plus, the master&lt;-&gt;buildslave communication requires an uninterrupted network connection, which gives us streaming logs, but adds network fragility.
+</p><p>
+<a href="http://mozilla-slaveapi.readthedocs.org/en/latest/">SlaveAPI</a> is designed to handle some of the above issues: determine the health of a slave, reboot a slave, or mark it as disabled.  In the future it may allow us to spin up and spin down AWS instances, and reimage hardware slaves.
+</p><p>
+<a href="https://blog.mozilla.org/it/2013/01/04/mozpool/">MozPool</a> is currently limited to Android Pandas, and allows for health checks on Pandas, rebooting Pandas, and IIRC reimaging Pandas.  A job that requires a Panda would be able to request [a healthy] one from the pool, run the job, and return it to the pool or mark it as bad.
+</p><p>
+With a combination of the two, LWR could request a node with certain properties (with tags, maybe?): any machine; any linux/osx machine; the fastest linux machine available with build tools; or specifically by hostname.  If LWR also passed the history and details of the job along with the request, the SlaveAPI/MozPool analog could make decisions like spot instance or reserved instance; fast or slow; most recently successfully built that tree so a depend build would be fast.  And we might be able to keep that complexity out of LWR.
+</p><p>
+We'd like to be able to spawn the job and detach, to remove the need for an uninterrupted network connection.  For status, it might be nice to be able to tail the log on demand, and/or add <a href="http://hg.mozilla.org/build/mozharness/annotate/f2b0fc143c66/mozharness/base/log.py#l10">network logging support to mozharness</a> (via a MultiNetworkLogger class, perhaps).  This would probably require a network log cluster of some sort.  Someone else suggested that we be able to toggle the network logging on at will, but otherwise default to off, to reduce network traffic.  I'm not entirely sure how to do this, but given a trigger we could replay the log from disk over the network, and continue to stream the log as it came in, once the network logging had caught up.
+</p><p>
+We could also take this opportunity to move away from the buildbot master/slave terminology, to... perhaps server/node?  farmer/cow? :)  Technically this wouldn't matter at all.  Semantically it does.
+</p>
+</td></tr></table><br />
+
+<a name="artifact_manifests"></a>
+<table style="border: thin solid #000033" border="0" cellspacing="0" width="100%"><tr><td style="padding: 1em;">
+<p>
+<b>artifact manifests</b>
+</p><p>
+Currently, we upload various things from build jobs: installers, crashsymbols, test zips. The build jobs then <a href="http://hg.mozilla.org/build/buildbotcustom/file/4e3090a2d66d/process/factory.py#l203">guess which binary is the installer</a> and sendchange the installer and test zip urls, triggering tests.  The buildbot master then uploads the build logs, sometimes to a completely different directory than the installer, which can cause issues with TBPL and other downstream consumers.  The test jobs take the installer and test zip urls from the sendchange, and use those to download and install the binary, extract the tests, and run them.  Sometimes they need other files: crashsymbols, the robocop apk, so we apply a regex to the installer url to guess the other urls, causing all sorts of fun when this doesn't work.  In a similar vein, we download previous MARs to generate partial updates.  However, the mar files contain version numbers, causing more fun when we try to guess the filename after a version bump.
+</p><p>
+Call me a buzzkill, but I'd like to eliminate all this fun guesswork in favor of a boring and predictable solution.  I'd like an artifact manifest.  A <i>structured</i> artifact manifest, with versioned manifest formats, so we know how to read them.  And while I think it's ok to have a section of the manifest for dumping random blobs of information, if portions of those become generally useful, we should probably put those in the structured area in the next version of the manifest format.
+</p><p>
+The manifest would definitely contain naming information for the various artifacts uploaded, as well as what they are.  If mozharness jobs uploaded their own logs, they would more predictably live with the other artifacts, and be specified in the manifest.  We could also include job status and uid and other such information.  Dependent jobs could then act on all of that information without guessing, given only the location of the manifest.  This also reduces the amount of information that LWR has to transfer between jobs... and may satisfy <a href="https://blog.mozilla.org/sfink/">:sfink</a>'s request for <a href="http://escapewindow.dreamwidth.org/243117.html?thread=457133#cmt457133">more structured schema for downstream jobs</a>.
+</p>
+</td></tr></table><br />
+
+<a name="phase_one"></a>
+<table style="border: thin solid #000033" border="0" cellspacing="0" width="100%"><tr><td style="padding: 1em;">
+<p>
+<b>phase one</b>
+</p><p>
+We can't write and roll all of this out at once.  Besides the magnitude of work represented by this handful of blog posts, we also have existing dependencies on buildbot that we don't yet have replacements for.  For phase one, we're picturing the graph processing pool sending jobs into buildbot, probably via the db.
+</p><p>
+First we should build the dependency graph for our existing build and test jobs.  If I were to tackle one piece first, this would be it, because it's a single script with no infrastructure dependencies.  It's easy to verify afterwards, by comparing the output to our existing <a href="https://tbpl.mozilla.org/">TBPL</a> runs.  Normalizing the builder names would help here.
+</p><p>
+Then we could feed that graph into self serve, potentially allowing us to more easily trigger individual builds (we currently use regexes, iirc).  Tests and repacks may be trickier, since they expect additional information to come via sendchange and buildbot properties, but that's a start.
+</p><p>
+Next we could start writing the server pieces -- trigger polling, graph generation, iterate through the graph.  Any web app work could start here.  This isn't strictly blocked by the self-serve implementation, so if more people chipped in we could work on those in parallel.
+</p><p>
+We could then start feeding the jobs from the graph into buildbot, and disable the respective buildbot polling and scheduling.
+</p><p>
+Once we got this far, we could also look into moving certain jobs that are already ported to mozharness out of buildbot and into a pure LWR implementation.  That may depend on a streaming log solution or artifact manifest solution.  This might belong in phase 2.
+</p>
+</td></tr></table><br />
+<p>
+I've been both excited and nervous writing about LWR. Excited, since I'm bursting with ideas for the project. Nervous, because so much of it extends outside of my domain of expertise; because it's a huge project; because portions of it are still nebulous concepts in my head.  I think we have the team(s) to build it, though.  And since I think best about projects when I write [about] them, these blog posts have helped focus my ideas.  To get a first draft down that we can revise later.
+</p><br /><p>
+In part 1, I covered <a href="http://escapewindow.dreamwidth.org/242767.html">where we are currently, and what needs to change to scale up</a>.<br />
+In part 2, I covered <a href="http://escapewindow.dreamwidth.org/243117.html">a high level overview of LWR</a>.<br />
+In part 4, I'm going to drill down into the dependency graph.<br />
+Then I'm going to meet with the A-team about this, and start writing some code.<br />
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=243301" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

@@ -1,0 +1,15 @@
+---
+layout: post
+title: Gaia Try
+---
+
+<p>
+We're now running <a href="https://tbpl.mozilla.org/?tree=Gaia-Try">Gaia tests on TBPL against Gaia pull requests</a>.
+</p><p>
+<a href="http://blog.johnford.org/">John Ford</a> wrote a commit hook in <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=989131">bug 989131</a> to push an update to the <a href="http://hg.mozilla.org/integration/gaia-try">gaia-try repo</a> that looks like <a href="http://hg.mozilla.org/integration/gaia-try/rev/2f284167a725">this</a>.  The buildbot test scheduler master is polling this repo; when it sees a change, it triggers tests against the <a href="http://ftp.mozilla.org/pub/mozilla.org/b2g/tinderbox-builds/mozilla-central-linux64_gecko/latest/">latest b2g desktop builds</a>.  The test jobs download the pre-built desktop binaries, and clone the appropriate pull-request Gaia repo and revision on top, then run the tests.  The buildbot work was completed in <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=986209">bug 986209</a>.
+</p><p>
+This should allow us to verify our code doesn't break anything <i>before</i> it's merged to Gaia proper, saving human time and reducing code churn.
+</p><p>
+Armen pointed out how <a href="http://armenzg.blogspot.ca/2014/04/gaia-code-changes-and-how-trickle-down.html">gaia code changes currently show up in the push count via bumper processes</a>, but that only reflects merged pull requests, not these un-reviewed pull requests.  Now that we've turned on gaia-try, this is equivalent to another mozilla-inbound (an additional 10% of our push load, iirc).  Our May pushes should see a significant bump.
+</p>
+<center><img src="http://darksecretlove.com/images/lj/2014/gaiatry.png" /></center><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=244978" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

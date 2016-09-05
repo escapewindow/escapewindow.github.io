@@ -1,0 +1,142 @@
+---
+layout: post
+title: 'LWR (job scheduling) part v: some thoughts on the jobs and graphs db'
+---
+
+<pre>
+[10:57] &lt;catlee&gt;    so one thing - I think it may be premature to look at db models before looking at APIs
+</pre><p>
+I think I agree with that, especially since it looks like LWR may end up looking very different than my initial views of it.
+</p><p>
+However, as I noted in <a href="http://escapewindow.dreamwidth.org/243301.html#preface">part 3's preface</a>, I'm going to go ahead and get my thoughts down, with the caveat that this will probably change significantly.  Hopefully this will be useful in the high-level sense, at least.
+</p><br />
+
+<a name="jobs_and_graphs_db"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>jobs and graphs db</b>
+</p><p>
+At the bare minimum, this will need graphs and jobs.  But right now I'm thinking we may want the following tables (or <a href="http://docs.mongodb.org/manual/reference/glossary/#term-collection">collections</a>, depending what db solution we end up choosing):
+</p><dl><dt>
+graph sets
+</dt><dd style="margin-bottom: 1em;"><p>
+Graph sets would tie a set of graphs together.  If we wanted to, say, launch b2g builds as a separate graph from the firefox mobile and firefox desktop graphs, we could still tie them together as a graph set.  Alternately, we could create a big graph that represents everything.  The benefit of keeping the separate graphs is it's easier to reference and retrigger jobs of a type: retrigger all the b2g jobs, retrigger all the Firefox desktop win32 PGO talos runs.
+</p></dd><dt>
+graph templates
+</dt><dd style="margin-bottom: 1em;"><p>
+I'm still in the brainstorm mode for the templates.  Having templates for graphs and jobs would allow us to generate graphs from the web app, allowing for a faster UI without having to farm out a job to the graph generation pool to clone a repo and generate a graph.  These would have templatized bits like branch name that we can fill out to create a graph for a specific branch.  It would also be one way we could keep track of changes in customized graphs or jobs (by diffing the template against the actual job or graph).
+</p></dd><dt>
+graphs
+</dt><dd style="margin-bottom: 1em;"><p>
+This would be the actual dependency graphs we use for scheduling, built from the templates or submitted from external requests.
+</p></dd><dt>
+job templates
+</dt><dd style="margin-bottom: 1em;"><p>
+This would work similar to the graph templates: how jobs would look, if you filled in the branch name and such, that we can easily work with in the webapp to create jobs.
+</p></dd><dt>
+jobs
+</dt><dd style="margin-bottom: 1em;"><p>
+These would have the definitions of jobs for specific graphs, but not the actual job run information -- that would go in the "job runs" table.
+</p></dd><dt>
+job runs
+</dt><dd style="margin-bottom: 1em;"><p>
+I thought of "job runs" as separate from "jobs" because I was trying to resolve how we deal with retriggers and retries.  Do we embed more and more information inside the job dictionary? What happens if we want to run a new job Y just like completed job X, but as its own entity?  Do we know how to scrub the previous history and status of job X, while still keeping the definition the same?  (This is what I meant by "volatile" information in jobs).  The "job run" table solves this by keeping the "jobs" table all about definitions, and the "job runs" table has the actual runtime history and status.  I'm not sure if I'm creating too many tables or just enough here, right now.
+</p></dd></dl><p>
+If you're wondering what you might run, you might care about the graph sets, and {graph,job} templates tables.  If you're wondering what <i>has</i> run, you would look at the graphs and job runs tables.  If you're wondering if a specific job or graph were customized, you would compare the graph or job against the appropriate template.  And if you're looking at retriggering stuff, you would be cloning bits of the graphs and jobs tables.
+</p><p>
+(I think Catlee has the job runs in a separate db, as the job queue, to differentiate pending jobs from jobs that are blocked by dependencies.  I think they're roughly equivalent in concept, and his model would allow for acting on those pending jobs faster.)
+</p><p>
+I think the main thing here is not the schema, but my concerns about retries and retriggers, keeping track of customization of jobs+graphs via the webapp, and reducing the turnaround time between creating a graph in LWR and showing it on the webapp.  Not all of these things will be as important for all projects, but since we plan on supporting a superset of gecko's needs with LWR, we'll need to support gecko's workflow at some point.
+</p>
+</div><br />
+
+<a name="dependency_graph_repo"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>dependency graph repo</b>
+</p><p>
+This repo isn't a mandatory requirement; I see it as a piece that could speed up and [hopefully] streamline the workflow of LWR.  It could allow us to:
+</p><ul style="list-style-type: circle;"><li style="margin-bottom: 1em;">
+refer to a set of job+graph definitions by a single SHA.   That would make it easier to tie graphs- and jobs- templates to the source.
+</li><li style="margin-bottom: 1em;">
+easily diff, say, mozilla-inbound jobs against mozilla-central.  You can do that if the jobs and graphs definitions live in-tree for each, but it's easier to tell if one revision differs from another revision than if one directory tree in a revision differs from that directory tree in another revision.  Even in the same repo: it's hard to tell if m-c revision 2's job and graphs have changed from m-c revision 1, without diffing.  The job-and-graph repo would [generally] only have a new revision if something has changed.
+</li><li style="margin-bottom: 1em;">
+pre-populate sets of jobs and graph templates in the db that people can use without re-generating them.
+</li></ul><p>
+There's no requirement that the jobs+graph definitions live in this repo, but having it would make the webapp graph+job creation a lot easier.
+</p><p>
+We could create a branch definitions file in-tree (though it could live elsewhere; its location would be defined in LWR's config).  The branch definitions could have trychooser-like options to turn parts of the graphs on or off: PGO, nightlies, l10n, etc.  These would be referenced by the job and graph definitions: "enable this job if nightlies are enabled in the branch definitions", etc.  So in the branch definitions, we could either point to this dependency graph repo+revision, or at a local directory, for the job+graph definitions.  In the gecko model, if someone adds a new job type, that would result in a new jobs+graphs repo revision.  A patch to point the branch-definitions file at the new revision would land in Try, first, then one of the inbound branches.  Then it would get merged to m-c and then out to the other inbound and project branches; then it would ride the trains.
+</p><p>
+(Of course, in the above model, there's the issue of inbound having different branch definitions than mozilla-central, which is why I was suggesting we have overrides by branch name.  I'm not sure of a better solution at the moment.)
+</p><p>
+The other side of this model: when someone pushes a new jobs+graphs revision, that triggers a "generate new jobs+graphs templates" job.  That would enter new jobs+graphs for the new SHA.  Then, if you wanted to create a graph or job based on that SHA, the webapp doesn't have to re-build those from scratch; it has them in the db, pre-populated.
+</p>
+</div><br />
+
+<a name="chunks_and_customizations"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>chunks and customizations</b>
+</p><ul style="list-style-type: circle;"><li style="margin-bottom: 2em;">
+For chunked jobs (most test jobs, l10n), we were brainstorming about having dynamic numbers of chunks.  If only a single machine is free, it would grab the first chunk, finish, then ask LWR if there are more chunks to run.  If only a handful of machines are available, LWR could lean towards starting <code>min_chunks</code> jobs.  If there are many machines idle, we can trigger <code>max_chunks</code> jobs in parallel.  I'm not sure how plausible this is, but this could help if it doesn't add too much complexity.
+</li><li style="margin-bottom: 2em;">
+I think that while users should be able to adjust graph- or job-priority, we should have max priorities set per-branch or per-user, so we can keep chemspill release builds at the highest priority.
+<br /><br />
+Similarly, I think we should allow customization of jobs via the webapp on certain branches, but
+<br /><br />
+<ol style="list-style-type: lower-alpha;"><li>
+we should mark them as customized (by, say, a flag, plus the diff between the template and the job), and
+</li><li>
+we need to prevent customizing, say, nightly builds that get sent to users, or release builds.
+</li></ol><br />
+This causes interesting problems when we want to clone a job or graph: do we clone a template, or the customized job or graph that contains volatile information?  (I worked around this in my head by creating the schema <a href="jobs_and_graphs_db">above</a>.)
+<br /><br />
+Signed graphs and jobs, per-branch restrictions, or separate LWR clusters with different ACLs, could all factor into limiting what people can customize.
+</li></ul>
+</div><br />
+
+<a name="retries_and_retriggers"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>retries and retriggers</b>
+</p><p>
+For retries, we need to track max [auto] retries, as well as job statuses per run.  I played with this in my head: do we keep track of runs separately from job definitions? Or clone the jobs, in which case volatile status and customizing jobs become more of an issue?  Keeping the job runs separate, and specifying whether they were an auto-retry or a user-generated retrigger, could help in preventing going beyond max-auto-retries.
+</p><p>
+Retriggers themselves are somewhat problematic if we mark jobs as <a href="http://escapewindow.dreamwidth.org/243472.html#relationships">skipped due to dependencies</a>: if a job that was unsuccessful is retriggered and exits successfully, do we revisit previously skipped jobs?  Or do we clone the graph when we retrigger, and keep all downstream jobs pending-blocked-by-dependencies?  Does this graph mark the previous graph as a parent graph, or do we mark it as part of the same graph set?
+</p><p>
+(This is less of a problem currently, since build jobs run sendchanges in that cascading-waterfall type scheduling; any time you retrigger a build, it will retrigger all downstream tests, which is useful if that's what you want.  If you don't want the tests, you either waste test machine time or human time in cancelling the tests.  Explicitly stating what we want in the graph is a better model imo, but forces us to be more explicit when we retrigger a job and want the downstream jobs.)
+</p><p>
+Another possibility: I thought that instead of marking downstream jobs as skipped-due-to-dependencies, we could leave them pending-blocked-by-dependencies until they either see a successful run from their upstream dependencies, or hit their TTL (request timeout).  This would remove some complexity in retriggering, but would leave a lot of pending jobs hanging around that could slow down the graph processing pool and skew our 15 minute wait time SLA metrics.
+</p><p>
+I don't think I have the perfect answers to these questions; a lot of my conclusions are based on the scope of the problem that I'm holding in my head.  I'm certain that some solutions are better for some workflows and others are better for others.  I think, for the moment, I came to the soft conclusion of a hand-wavy retriggering-portions-of-the-graph-via-webapp (or web api call, which does the equivalent).
+</p><p>
+A random semi-tangential thought: whichever method of pending- or skipped- solution we generate will probably significantly affect our 15 minute wait time SLA metrics, anyway; they may also provide more useful metrics like end-to-end-times.  After we move to this model, we may want to revisit our metric of record.
+</p>
+</div><br />
+
+<a name="lwr_runner.py"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>lwr_runner.py</b>
+</p><p>
+(This doesn't really have anything to do with the db, but I had this thought recently, and didn't want to save it for a part 6.)
+</p><p>
+While discussing this with the Gaia, A-Team, and perf teams, it became clear that we may need a solution for other projects that want to run simple jobs that aren't ported to mozharness.  Catlee was thinking an equivalent process to the buildbot buildslave process: this would handle logging, uploads, status notifications, etc., without requiring a constant connection to the master.  Previously I had worked with daemons like this that spawned jobs on the build farm, but then moved to launching scripts via sshd as a lower-maintenance solution.
+</p><p>
+The downsides of no daemon include having to solve the mach context problem on macs, having to deal with sshd on windows, and needing a remote logging solution in the scripts.  The upsides include being able to add machines to the pool without requiring the daemon, avoiding platform-specific issues with writing and maintaining the daemon(s), and script changes are faster to roll out (and more granular) than upgrading a daemon across an entire pool.
+</p><p>
+if we create a <code>mozharness/scripts/lwr_runner.py</code> that takes a set of commands to run against a repo+revision (or set of repos+revisions), with pre-defined metrics for success and failure, then simpler processes don't need their own mozharness script; we could wrap the commands in lwr_runner.py.  And we'd get all the logging, error parsing, and retry logic already defined in mozharness.
+</p><p>
+I don't think we should rule out either approach just yet.  With the lwr_runner.py idea, both approaches seem viable at the moment.
+</p>
+</div><br />
+
+<p>
+</p><br /><p>
+In part 1, I covered <a href="http://escapewindow.dreamwidth.org/242767.html">where we are currently, and what needs to change to scale up</a>.<br />
+In part 2, I covered <a href="http://escapewindow.dreamwidth.org/243117.html">a high level overview of LWR</a>.<br />
+In part 3, I covered <a href="http://escapewindow.dreamwidth.org/243301.html">some hand-wavy LWR specifics, including what we can roll out in phase 1</a>.<br />
+In part 4, I <a href="http://escapewindow.dreamwidth.org/243472.html">drilled down into the dependency graph</a>.<br />
+We met with the A-team about this, a couple times, and are planning on working on LWR together!<br />
+Now I'm going to take care of some vcs-sync tasks, prep for this next meeting, and start writing some code.<br />
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=243887" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

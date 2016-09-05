@@ -1,0 +1,217 @@
+---
+layout: post
+title: 100% test coverage [in python]
+---
+
+<p>
+Tl;dr: I reached 100% test coverage (as measured by <a href="http://coverage.readthedocs.io/en/coverage-4.2/"><code>coverage</code></a>) on several of my projects, and I'm planning on continuing that trend for the important projects I maintain.  We were chatting about this, and I decided to write a blog post about how to get to 100% test coverage, and why.
+</p>
+<ul>
+<li><a href="#why">Why 100% test coverage?</a>
+<ul>
+<li><a href="#unreachable_code">Find unreachable code</a></li>
+<li><a href="#uncovering_bugs">Uncovering bugs while writing tests</a></li>
+<li><a href="#future_changes">A helpful guide for future changes</a></li>
+<li><a href="#tests_beget_tests">Momentum is contagious</a></li>
+<li><a href="#technical_wealth">Technical wealth</a></li>
+</ul></li>
+<li><a href="#how">How did you reach 100% test coverage [in python]?</a>
+<ul>
+<li><a href="#clean_arch">Clean architecture</a></li>
+<li><a href="#parse_args">parse_args()</a></li>
+<li><a href="#main">Toss <code>if __name__ == '__main__':</code></a></li>
+<li><a href="#rewrite">Rewrite the logic</a></li>
+<li><a href="#parametrize"><code>@pytest.mark.parametrize</code></a></li>
+<li><a href="#fixtures">fixtures</a></li>
+<li><a href="#mock_and_integration">mock and integration</a></li>
+<li><a href="#pytest">Use pytest!</a></li>
+<li><a href="#misc">Miscellaneous hints</a></li>
+</ul></li></ul>
+
+<h2>
+<a name="why">Why 100% test coverage?</a>
+</h2>
+<h3>
+<a name="unreachable_code">Find unreachable code</a>
+</h3><p>
+Back in 2014, Apple issued a critical security update for iOS, to patch a bug known as <a href="https://www.imperialviolet.org/2014/02/22/applebug.html">#gotofail</a>.
+</p><blockquote><pre>
+static OSStatus
+SSLVerifySignedServerKeyExchange(SSLContext *ctx, bool isRsa, SSLBuffer signedParams,
+                                 uint8_t *signature, UInt16 signatureLen)
+{
+    OSStatus err;
+    ...
+
+    if ((err = SSLHashSHA1.update(&amp;hashCtx, &amp;serverRandom)) != 0)
+        goto fail;
+    if ((err = SSLHashSHA1.update(&amp;hashCtx, &amp;signedParams)) != 0)
+<div style="background: #FFE0E0">        goto fail;
+        goto fail;</div>
+    if ((err = SSLHashSHA1.final(&amp;hashCtx, &amp;hashOut)) != 0)
+        goto fail;
+    ...
+
+fail:
+    SSLFreeBuffer(&amp;signedHashes);
+    SSLFreeBuffer(&amp;hashCtx);
+    return err;
+}
+</pre></blockquote><p>
+The second highlighted <code>goto fail</code> caused <code>SSLVerifySignedServerKeyExchange</code> calls to jump to the <code>fail</code> block with a successful <code>err</code>.  This bypassed the actual signature verification and returned a blanket success.  With this bug in place, malicious servers would have been able to serve SSL certs with mismatched or missing private keys, and still look legit.
+</p><p>
+One might argue for strict indentation, using curly braces for all <code>if</code> blocks, better coding practices, or just Better Reviews.  But 100% test coverage would have found it.
+</p><blockquote>
+"For the bug at hand, even the simplest form of coverage analysis, namely line coverage, would have helped to spot the problem: Since the problematic code results from unreachable code, there is no way to achieve 100% line coverage.
+<br /><br />
+"Therefore, any serious attempt to achieve full statement coverage should have revealed this bug."
+<ul> - <a href="https://avandeursen.com/2014/02/22/gotofail-security/">Arie van Deursen</a></ul>
+</blockquote><p>
+Even though python has meaningful indentation, that doesn't mean it's foolproof against unreachable code.  Simply marking each line as visited is enough to protect against this class of bug.
+</p><p>
+And even when there isn't a huge security issue at stake, <a href="https://en.wikipedia.org/wiki/Unreachable_code">unreachable code</a> can clutter the code base.  At best, it's dead weight, extra lines of code to work around, to refactor, to have to read when debugging.  At worst, it's confusing, misleading, and hides serious bugs.  Don't do unreachable code.
+</p><h3>
+<a name="uncovering_bugs">Uncovering bugs while writing tests</a>
+</h3><p>
+My first attempt at 100% test coverage was on a personal project, on a whim.  I knew all my code was good, but full coverage was something I had never seen.  It was a lark.  A throwaway bit of effort to see if I could do it, and then something I could mention offhand.  "Oh yeah, and by the way, it has 100% test coverage."
+</p><p>
+Imagine my surprise when I uncovered some non-trivial bugs.
+</p><p>
+This has been the norm.  Every time I put forward a sustained effort to add test coverage to a project, I uncover some things that need fixing.  And I fix them.  Even if its as small as a confusing variable name or a complex bit of logic that could use a comment or two.  And often it's more than that.
+</p><p>
+Certainly, if I'm able to find and fix bugs while writing tests, I should be able to find and fix those bugs when they're uncovered in the wild, no?  The answer is yes.  But.  It's a difference of headspace and focus.
+</p><p>
+When I'm focused on isolating a discrete chunk of code for testing, it's easier to find wrong or confusing behavior than when when I'm deploying some large, complex production process that may involve many other pieces of software.  There are too many variables, too little headspace for the problem, and often too little time.  And Murphy says those are the times these problems are likely to crop up.  I'd rather have higher confidence at those times.  Full test coverage helps reduce those variables when the chips are down.
+</p><h3>
+<a name="future_changes">A helpful guide for future changes</a>
+</h3><p>
+Software is the proverbial shark: it's constantly moving, or it dies.  Small patches are pretty easy to eyeball and tell if they're good.  Well written and maintained code helps here too, as does documentation, mentoring, and code reviews.  But only tests can verify that the code is still good, especially when dealing with larger patches and refactors.
+</p><p>
+Tests can help new contributors catch problems before they reach code review or production.  And sometimes after a long hiatus and mental context switch, I feel like a new contributor to my own projects.  The new contributor you are helping may be you in six months.
+</p><p>
+Sometimes your dependencies release new versions, and it's nice to have a full set of tests to see if something will break before rolling anything out to production.  And when making large changes or refactoring, tests can be a way of keeping your sanity.
+</p>
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">whenever someone else&#39;s test prevents me from landing new code with a bug, i&#39;m hella grateful <a href="https://t.co/s1Yq6Es4ex">pic.twitter.com/s1Yq6Es4ex</a></p>&mdash; Adrienne Porter Felt (@__apf__) <a href="https://twitter.com/__apf__/status/769044483895951361">August 26, 2016</a></blockquote>
+
+<h3>
+<a name="tests_beget_tests">Momentum is contagious</a>
+</h3><p>
+There's the social aspect of codebase maintenance.  If you want to ask a new contributor to write tests for their code, that's an easier ask when you're at 100% coverage than when you're at, say, 47%.
+</p><p>
+This can also carry over to your peers' and coworkers' projects.  Enough momentum, and you can build an ecosystem of well-tested projects, where the majority of all bugs are caught before any code ever lands on the main repo.
+</p><h3>
+<a name="technical_wealth">Technical wealth</a>
+</h3><p>
+Have you read <a href="http://firstround.com/review/forget-technical-debt-heres-how-to-build-technical-wealth/">Forget Technical Debt - Here's How to Build Technical Wealth</a>?  It's well worth the read.
+</p><p>
+Automated testing and self-validation loom large in that post.  She does caution against 100% test coverage as an end in itself in the early days of a startup, for example, but that's when time to market and profitability are opportunity costs.  When developing technical wealth at an existing enterprise, the long term maintenance benefits speak for themselves.
+</p><h2>
+<a name="how">How did you reach 100% test coverage [in python]?</a>
+</h2><h3>
+<a name="clean_arch">Clean architecture</a>
+</h3><p>
+If you haven't watched <a href="https://www.youtube.com/watch?v=DJtef410XaM">Clean Architecture in Python</a>, add it to your list.  It's worth the time.  It's the Python take on <a href="https://www.youtube.com/watch?v=o_TH-Y78tt4">Uncle Bob Martin's original talk</a>.  Besides making your code more maintainable, it makes your code more testable.  When I/O is cleanly separated from the logic, the logic is easily testable, and the I/O portions can be tested in mocked code and integration tests.
+</p><h3>
+<a name="parse_args">parse_args()</a>
+</h3><p>
+Some people swear by <a href="http://click.pocoo.org/">click</a>.  I'm not quite sold on it, yet, but it's easy to want something other than optparse or argparse when faced with a block of option logic like in <a href="http://hg.mozilla.org/build/tools/file/84b736ad196a/release/signing/signtool.py#l42">this</a> <code>main()</code> function.  How can you possibly sanely test all of that, especially when right after the option parsing we go into the <a href="http://hg.mozilla.org/build/tools/file/84b736ad196a/release/signing/signtool.py#l183">main logic</a> of the script?
+</p><p>
+I pulled all of the optparse logic into <a href="https://github.com/mozilla-releng/signtool/blob/f8aa8f558ff1cfdb4e5d3a57b491755fca9e3103/signtool/signtool.py#L49">its own function</a>, and I <a href="https://github.com/mozilla-releng/signtool/blob/f8aa8f558ff1cfdb4e5d3a57b491755fca9e3103/signtool/signtool.py#L239">called it with <code>sys.argv[:1]</code></a>.  That let me start <a href="https://github.com/mozilla-releng/signtool/blob/f8aa8f558ff1cfdb4e5d3a57b491755fca9e3103/tests/test_signtool.py#L60">testing optparse tests</a>, separate from my signing tests.  Signtool is one of those projects where I haven't yet reached 100% coverage, but it's high on my list.
+</p><h3>
+<a name="main">Toss <code>if __name__ == '__main__':</code></a>
+</h3><p>
+<a href="https://docs.python.org/3/library/__main__.html"><code>if __name__ == '__main__':</code></a> is one of the first things we learn in python.  It allows us to mix script and library functionality into the same file: when you import the file, <code>__name__</code> is the name of the module, and the block doesn't execute, and when you run it as a script, <code>__name__</code> is set to <code>__main__</code>, and the block executes.  (More detailed descriptions <a href="http://stackoverflow.com/questions/419163/what-does-if-name-main-do">here</a>.)
+</p><p>
+There are ways to skip these blocks in code coverage.  That might be the easiest solution if all you have under <code>if __name__ == '__main__':</code> is a call to <code>main()</code>.  But I've seen scripts where there are pages of code inside this block, all code-coverage-unfriendly.
+</p><p>
+I forget where I found my solution.  <a href="http://stackoverflow.com/a/14502904">This answer</a> suggests <code>__name__ == '__main__' and main()</code>.  I rewrote this as
+</p><blockquote><pre>
+def main(name=None):
+    if name in (None, '__main__'):
+        ...
+
+
+main(name=__name__)
+</pre></blockquote><p>
+Either way, you don't have to worry about covering the special if block.  You can mock the heck out of <code>main()</code> and get to 100% coverage that way.  (See the <a href="#mock_and_integration">mock and integration</a> section.)
+</p><h3>
+<a name="rewrite">Rewrite the logic</a>
+</h3><p>
+<code>mimetypes.guess_type('foo.log')</code> returns <code>'text/plain'</code> on OSX, and <code>None</code> on linux.  I fixed it like this:
+</p><blockquote><pre>
+content_type, _ = mimetypes.guess_type(path)
+if content_type is None and path.endswith('.log'):
+    content_type = 'text/plain'
+</pre></blockquote><p>
+And that works.  You can get full coverage on linux: a <code>"foo.log"</code> will enter the <code>if</code> block, and a <code>"foo.unknown_extension"</code> will skip it.  But on OSX you'll never satisfy the conditional; the <code>content_type</code> will never be <code>None</code> for a <code>foo.log</code>.
+</p><p>
+More ugly mocking, right?  You could.  But how about:
+</p><blockquote><pre>
+content_type, _ = mimetypes.guess_type(path)
+if path.endswith('.log'):
+    content_type = content_type or 'text/plain'
+</pre></blockquote><p>
+Coverage will mark that as covered on both linux and OSX.
+</p><h3>
+<a name="parametrize">@pytest.mark.parametrize</a>
+</h3><p>
+I used to use nosetests for everything, just because that's what I first encountered in the wild.  When I <a href="https://github.com/SecurityInnovation/PGPy/issues/154">first hacked on PGPy</a> I had to get accustomed to pytest, but that was pretty easy.  One thing that drew me to it was <code>@pytest.mark.parametrize</code> (which is an <a href="http://www.dictionary.com/browse/parametrize?s=t">alternate spelling</a>.)
+</p><p>
+With <code>@pytest.mark.parametrize</code>, you can loop through multiple inputs with the same logic, without having to write the loops yourself.  Like <a href="http://doc.pytest.org/en/latest/example/parametrize.html#different-options-for-test-ids">this</a>.  Or, for the PGPy unicode example, <a href="https://github.com/SecurityInnovation/PGPy/blob/137c5d4df4d64a62aeb1a03c849728e3b76ab852/tests/test_01_types.py#L23-L43">this</a>.
+</p><p>
+This is doable in nosetests, but pytest encourages it by making it easy.
+</p><h3>
+<a name="fixtures">fixtures</a>
+</h3><p>
+In nosetests, I would often write small functions to give me objects or data structures to test against.  That, or I'd define constants, and I'd be careful to avoid changing any mutable constants, e.g. dicts, during testing.
+</p><p>
+<a href="http://doc.pytest.org/en/latest/fixture.html">pytest fixtures</a> allow you to do that, but more simply.  With a <code>@pytest.fixture(scope="function")</code>, the fixture will get reset every function, so even if a test changes the fixture, the next test will get a clean copy.
+</p><p>
+There are also built-in fixtures, like <code>tmpdir</code>, <code>mocker</code>, and <code>event_loop</code>, which allow you to more easily and succintly perform setup and cleanup around your tests.  And there are lots of <a href="https://pypi.python.org/pypi?%3Aaction=search&amp;term=pytest-&amp;submit=search">additional modules</a> which add fixtures or other functionality to pytest.
+</p><p>
+<a href="http://devork.be/talks/advanced-fixtures/advfix.html">Here are slides from a talk on advanced fixture use</a>.
+</p><h3>
+<a name="mock_and_integration">mock and integration</a>
+</h3><p>
+It's certainly possible to test the I/O and loop-laden main sections of your project.  For unit tests, it's a matter of <a href="https://github.com/mozilla-releng/scriptworker/blob/c1474184e59eeddd7c4da8fe396ae3f0511e01cb/scriptworker/test/test_worker.py#L167-L173">mocking the heck out of it</a>.  Pytest's <code>mocker</code> fixture helps here, although it's certainly possible to nest a bunch of <code>with mock.patch</code> blocks to avoid mocking that code past the end of your test.
+</p><p>
+Even if you have to include some I/O in a function, that doesn't mean you have to use <code>mock</code> to test it.  Instead of
+</p><blockquote><pre>
+def foo():
+    requests.get(...)
+</pre></blockquote><p>
+you could do
+</p><blockquote><pre>
+def foo(request_function=requests.get):
+    request_function(...)
+</pre></blockquote><p>
+Then when you unit test, you can override <code>request_function</code> with something that raises the exception or returns the value that you want to test.
+</p><p>
+Finally, even after you get to 100% coverage on unit tests, it's good to add some integration testing to make sure the project works in the real world.  For scriptworker, these tests are marked with <code>@pytest.mark.skipif(os.environ.get("NO_TESTS_OVER_WIRE"), reason=SKIP_REASON)</code>, so we can turn them off in Travis.
+</p><h3>
+<a name="pytest">Use pytest!</a>
+</h3><p>
+Besides parameterization and the <code>mocker</code> fixture, pytest is easily superior to nosetests.
+</p><p>
+There's parallelization with <a href="https://github.com/pytest-dev/pytest-xdist">pytest-xdist</a>.  The fixtures make per-test setup and cleanup a breeze.  Pytest is more succinct:
+<code>assert x == y</code> instead of <code>self.assertEquals(x, y)</code> ; because we don't have the <code>self</code> to deal with, the tests can be functions instead of methods.  The following
+</p><blockquote><pre>
+with pytest.raises(OSError):
+    function(*args, **kwargs)
+</pre></blockquote><p>
+is a lot more legible than <code>self.assertRaises(OSError, function, *args, **kwargs)</code> .  You've got <code>@pytest.mark.asyncio</code> to <code>await</code> a coroutine; the <code>event_loop</code> fixture is there for more asyncio testing goodness, with auto-open/close for each test.
+</p><h3>
+<a name="misc">Miscellaneous hints</a>
+</h3><p>
+Use <a href="https://tox.readthedocs.io/en/latest/">tox</a>, <a href="https://coveralls.io/">coveralls</a>, and <a href="https://travis-ci.org/">travis</a> or <a href="https://github.com/taskcluster/taskcluster-github">taskcluster-github</a> for per-checkin test and coverage results.
+</p><p>
+Use <code>coverage&gt;=4.2</code> for async code.  Pre-4.2 can't handle the async.
+</p><p>
+Use coverage's <a href="http://coverage.readthedocs.io/en/latest/branch.html">branch coverage</a> by setting <a href="http://coverage.readthedocs.io/en/latest/config.html#run">branch = True</a> in your <code>.coveragerc</code>.
+</p><p>
+I haven't tried <a href="http://hypothesis.readthedocs.io/en/latest/">hypothesis</a> or other behavior- or property- based testing yet.  But hypothesis does <a href="http://hypothesis.works/articles/hypothesis-pytest-fixtures/">use pytest</a>.  There's an <a href="https://github.com/pytest-dev/pytest/issues/916">issue open</a> to integrate them more deeply.
+</p><p>
+It looks like I need to learn more about <a href="https://talkpython.fm/episodes/show/63/validating-python-tests-with-mutation-testing">mutation testing</a>.
+</p><p>
+What other tricks am I missing?
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=247980" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

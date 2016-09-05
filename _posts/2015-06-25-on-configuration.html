@@ -1,0 +1,172 @@
+---
+layout: post
+title: on configuration
+---
+
+<p>
+A few people have suggested I look at other packages for config solutions.  I thought I'd record some of my thoughts on the matter.  Let's look at requirements first.
+</p>
+<h3>Requirements</h3>
+<ol><li>
+Commandline argument support.  When running scripts, it's much faster to specify some config via the commandline than always requiring a new config file for each config change.<br /><br />
+</li><li>
+Default config value support.  If a script assumes a value works for most cases, let's make it default, and allow for overriding those values in some way.<br /><br />
+</li><li>
+Config file support.  We need to be able to read in config from a file, and in some cases, several files.  Some config values are either too long and unwieldy to pass via the commandline, and some config values contain characters that would be interpreted by the shell.  Plus, the ability to use <code>diff</code> and version control on these files is invaluable.<br /><br />
+</li><li>
+Multiple config file type support.  json, yaml, etc.<br /><br />
+</li><li>
+Adding the above three solutions together.  The order should be: default config value -&gt; config file -&gt; commandline arguments.  (The rightmost value of a configuration item wins.)<br /><br />
+</li><li>
+Config definition and validation.  Commandline options are constrained by the options that are defined, but config files can contain any number of arbitrary key/value pairs.<br /><br />
+</li><li>
+The ability to add groups of commandline arguments together.  Sometimes familes of scripts need a common set of commandline options, but also need the ability to add script-specific options.  Sharing the common set allows for consistency.<br /><br />
+</li><li>
+The ability to add config definitions together.  Sometimes families of scripts need a common set of config items, but also need the ability to add script-specific config items.<br /><br />
+</li><li>
+Locking and/or logging any changes to the config.  Changing config during runtime can wreak havoc on the debugability of a script; locking or logging the config helps avoid or mitigate this.<br /><br />
+</li><li>
+Python 3 support, and python 2.7 unicode support, preferably unicode-by-default.<br /><br />
+</li><li>
+Standardized solution, preferably non-company and non-language specific.<br /><br />
+</li><li>
+All-in-one solution, rather than having to use multiple solutions.<br /><br />
+</li></ol>
+<h3>Packages and standards</h3>
+<h4><a href="https://docs.python.org/dev/library/argparse.html">argparse</a></h4>
+<p>
+Argparse is the standardized python commandline argument parser, which is why configman and scriptharness have wrapped it to add further functionality.  Its main drawbacks are lack of config file support and limited validation.
+</p>
+<ol><li>
+Commandline argument support: yes.  That's what it's written for.<br /><br />
+</li><li>
+Default config value support: yes, for commandline options.<br /><br />
+</li><li>
+Config file support: no.<br /><br />
+</li><li>
+multiple config file type support: no.<br /><br />
+</li><li>
+Adding the above three solutions together: no.  The default config value and the commandline arguments are placed in the same <code>Namespace</code>, and you have to use the <code>parser.get_default()</code> method to determine whether it's a default value or an explicitly set commandline option.<br /><br />
+</li><li>
+Config definition and validation: limited.  It only covers commandline option definition+validation, and there's the <code>required</code> flag but not a <code>if foo is set, bar is required</code> type validation.  It's possible to roll your own, but that would be script-specific rather than part of the standard.<br /><br />
+</li><li>
+Adding groups of commandline arguments together: yes.  You can take multiple parsers and make them parent parsers of a child parser, if the parent parsers have specified <code>add_help=False</code><br /><br />
+</li><li>
+Adding config definitions together: limited, as above.<br /><br />
+</li><li>
+The ability to lock/log changes to the config: no.  <code>argparse.Namespace</code> will take changes silently.<br /><br />
+</li><li>
+Python 3 + python 2.7 unicode support: yes.<br /><br />
+</li><li>
+Standardized solution: yes, for python.  No for other languages.<br /><br />
+</li><li>
+All-in-one solution: no, for the above limitations.<br /><br />
+</li></ol>
+<h4><a href="https://github.com/mozilla/configman">configman</a></h4>
+<p>
+Configman is a tool written to deal with configuration in various forms, and adds the ability to transform configs from one type to another (e.g., commandline to ini file).   It also adds the ability to block certain keys from being saved or output.  Its argparse implementation is deeper than scriptharness' ConfigTemplate argparse abstraction.
+</p><p>
+Its main drawbacks for scriptharness usage appear to be lack of python 3 + py2-unicode-by-default support, and for being another non-standardized solution.  I've given python3 porting two serious attempts, so far, and I've hit a wall on the dotdict <code>__getattr__</code> hack working differently on python 3.  My wip is <a href="https://github.com/escapewindow/configman/commits/python3">here</a> if someone else wants a stab at it.
+</p>
+<ol><li>
+Commandline argument support: yes.<br /><br />
+</li><li>
+Default config value support: yes.<br /><br />
+</li><li>
+Config file support: yes.<br /><br />
+</li><li>
+Multiple config file type support: yes.<br /><br />
+</li><li>
+Adding the above three solutions together: not as far as I can tell, but since you're left with the ArgumentParser object, I imagine it'll be the same solution to wrap configman as argparse.<br /><br />
+</li><li>
+Config definition and validation: yes.<br /><br />
+</li><li>
+Adding groups of commandline arguments together: yes.<br /><br />
+</li><li>
+Adding config definitions together: not sure, but seems plausible.<br /><br />
+</li><li>
+The ability to lock/log changes to the config: no.  <code>configman.namespace.Namespace</code> will take changes silently.<br /><br />
+</li><li>
+Python 3 support: no. Python 2.7 unicode support: there are enough str() calls that it looks like unicode is a second class citizen at best.<br /><br />
+</li><li>
+Standardized solution: no.<br /><br />
+</li><li>
+All-in-one solution: no, for the above limitations.<br /><br />
+</li></ol>
+<h4><a href="https://github.com/docopt/docopt">docopt</a></h4>
+<p>
+Docopt simplifies the commandline argument definition and prettifies the help output.  However, it's purely a commandline solution, and doesn't support adding groups of commandline options together, so it appears to be oriented towards relatively simple script configuration.  It could potentially be added to json-schema definition and validation, as could the argparse-based commandline solutions, for an all-in-two solution.  More on that below.
+</p>
+
+<h4><a href="http://json-schema.org/">json-schema</a></h4>
+<p>
+This looks very promising for an overall config definition + validation schema.  The main drawback, as far as I can see so far, is the lack of commandline argument support.
+</p><p>
+A commandline parser could generate a config object to validate against the schema.  (Bonus points for writing a function to validate a parser against the schema before runtime.)  However,  this would require at least <i>two</i> definitions: one for the schema, one for the hopefully-compliant parser.  Alternately, the schema could potentially be extended to support argparse settings for various items, at the expense of full standards compatiblity.
+</p><p>
+There's already a <a href="https://github.com/Julian/jsonschema">python jsonschema package</a>.
+</p>
+<ol><li>
+Commandline argument support: no.<br /><br />
+</li><li>
+Default config value support: yes.<br /><br />
+</li><li>
+Config file support: I don't think directly, but anything that can be converted to a dict can be validated.<br /><br />
+</li><li>
+Multiple config file type support: no.<br /><br />
+</li><li>
+Adding the above three solutions together: no.<br /><br />
+</li><li>
+Config definition and validation: yes.<br /><br />
+</li><li>
+Adding groups of commandline arguments together: no.<br /><br />
+</li><li>
+Adding config definitions together: sure, you can add dicts together via update().<br /><br />
+</li><li>
+The ability to lock/log changes to the config: no.<br /><br />
+</li><li>
+Python 3 support: yes. Python 2.7 unicode support: I'd guess yes since it has python3 support.<br /><br />
+</li><li>
+Standardized solution: yes, even cross-language.<br /><br />
+</li><li>
+All-in-one solution: no, for the above limitations.<br /><br />
+</li></ol>
+
+<h4>scriptharness 0.2.0 <a href="http://python-scriptharness.readthedocs.org/en/latest/config/#configtemplates">ConfigTemplate</a> + <a href="http://python-scriptharness.readthedocs.org/en/latest/config/#loggingdict-and-readonlydict">LoggingDict or ReadOnlyDict</a></h4>
+<p>
+Scriptharness currently extends <code>argparse</code> and <code>dict</code> for its config.  It checks off the most boxes in the requirements list currently.  My biggest worry with the <code>ConfigTemplate</code> is that it isn't fully standardized, so people may be hesitant to port all of their configs to it.
+</p><p>
+An argparse/json-schema solution with enough glue code in between might be a good solution.  I think ConfigTemplate is sufficiently close to that that adding jsonschema support shouldn't be too difficult, so I'm leaning in that direction right now.  Configman has some nice behind the scenes and cross-file-type support, but the python3 and __getattr__ issues are currently blockers, and it seems like a lateral move in terms of standards.
+</p><p>
+An alternate solution may be BYOC.  If the scriptharness Script takes a config object that you built from <i>somewhere</i>, and gives you tools that you can choose to use to build that config, that may allow for enough flexibility that people can use their preferred style of configuration in their scripts.  The cost of that flexibility is familiarity between scriptharness scripts.
+</p>
+<ol><li>
+Commandline argument support: yes.<br /><br />
+</li><li>
+Default config value support: yes, both through argparse parsers and script <code>initial_config</code>.<br /><br />
+</li><li>
+Config file support: yes.  You can define multiple required config files, and multiple optional config files.<br /><br />
+</li><li>
+Multiple config file type support: no.  Mozharness had .py and .json.  Scriptharness currently only supports json because I was a bit iffy about <code>execfile</code>ing python again, and PyYAML doesn't always install cleanly everywhere.  It's on the list to add more formats, though.  We probably need at least one dynamic type of config file (e.g. python or yaml) or a config-file builder tool.<br /><br />
+</li><li>
+Adding the above three solutions together: yes.<br /><br />
+</li><li>
+Config definition and validation: yes.<br /><br />
+</li><li>
+Adding groups of commandline arguments together: yes.<br /><br />
+</li><li>
+Adding config definitions together: yes.<br /><br />
+</li><li>
+The ability to lock/log changes to the config: yes.  By default <code>Script</code>s use <code>LoggingDict</code> that logs runtime changes; <code>StrictScript</code> uses a <code>ReadOnlyDict</code> (sams as mozharness) that prevents any changes after locking.<br /><br />
+</li><li>
+Python 3 and python 2.7 unicode support: yes.<br /><br />
+</li><li>
+Standardized solution: no.  Extended/abstracted argparse + extended python dict.<br /><br />
+</li><li>
+All-in-one solution: yes.<br /><br />
+</li></ol>
+
+<h4>Corrections, additions, feedback?</h4>
+<p>
+As far as I can tell there is no perfect solution here.  Thoughts?
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=246718" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

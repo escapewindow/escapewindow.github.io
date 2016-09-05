@@ -1,0 +1,27 @@
+---
+layout: post
+title: mozharness turns 5
+---
+
+<p>
+Five years ago today, I landed the <a href="http://hg.mozilla.org/build/mozharness/rev/7618076dbf32">first mozharness commit</a> in my user repo.  (<a href="https://github.com/mozilla/build-mozharness/commit/9e070c52b91e2f1458ee1589904345d39ab01ad1">github</a>)
+</p><blockquote style="border: thin solid #660000; padding: 1em">
+<code>starting something, or wasting my time. Log.py + a scratch trunk_nightly.json</code>
+</blockquote><p>
+The project had three initial goals:
+</p><ul style="list-style-type: circle;"><li>
+First and foremost, I was tasked with building a multi-locale Fennec on Maemo.  This was a more complex task than could sanely fit in a buildbot factory.
+<br /><br />
+</li><li>
+The Mozilla Releng team was already discussing pulling logic out of buildbot factories and into client-side scripts.  I had been wanting to write a second version of my script framework idea.  The first version was closed-source, perl, and very company- and product-specific.  The second would improve on the first in every way, while keeping its three central principles of full logging, flexible config, and modular actions.
+<br /><br />
+</li><li>
+Finally, at that point I was still a Perl developer learning Python.  I tend learn languages by writing a project from scratch in that new language; this was my opportunity.
+<br /><br />
+</li></ul><p>
+Multi-locale Fennec became a reality, and then we started adding projects to mozharness, one by one.
+</p><p>
+As of <a href="http://escapewindow.dreamwidth.org/245416.html">last July</a>, mozharness was the client-side engine for the majority of Mozilla's CI and release infrastructure.  I still see plenty of activity in bugmail and IRC these days.  I'll be the first to point out its shortcomings, but I think overall it has been a success.
+</p><p>
+Happy birthday, mozharness!
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=245792" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

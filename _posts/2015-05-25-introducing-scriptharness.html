@@ -1,0 +1,52 @@
+---
+layout: post
+title: introducing scriptharness
+---
+
+<p>
+I found myself missing mozharness at various points over the past 10 months.  Several things kept me from using it at my then-new job:
+</p><ul style="list-style-type: circle;"><li>
+Even though we had kept <code>mozharness.base.*</code> largely non-Mozilla-specific, the mozharness clone-and-run model meant there was a lot of Mozilla-specific code that came along with it.
+<br /><br />
+</li><li>
+The monolithic BaseScript + mixins model had a very steep barrier of entry.  There's a significant learning curve, and scripts need to be fully ported to mozharness to take advantage of its features.
+</li></ul><p>
+I had wanted to address these issues for years, but never had time to devote fully to harness-specific development.
+</p><p>
+Now I do.
+</p><p>
+Introducing scriptharness 0.1.0:
+</p><ul style="list-style-type: circle;"><li>
+Release Notes: <a href="http://python-scriptharness.readthedocs.org/en/stable/releasenotes/0.1.0/">http://python-scriptharness.readthedocs.org/en/stable/releasenotes/0.1.0/</a>
+<br /><br />
+    <ul style="list-style-type: disc;"><li>
+        The release notes highlight differences between scriptharness and mozharness, as well as known issues.
+    <br /><br /></li></ul>
+</li><li>
+PyPI: <a href="https://pypi.python.org/pypi/scriptharness/0.1.0">https://pypi.python.org/pypi/scriptharness/0.1.0</a>
+<br /><br />
+</li><li>
+GitHub: <a href="https://github.com/scriptharness/python-scriptharness/releases/tag/v0.1.0">https://github.com/scriptharness/python-scriptharness/releases/tag/v0.1.0</a>
+<br /><br />
+</li><li>
+Read the Docs: <a href="http://python-scriptharness.readthedocs.org/en/stable/">http://python-scriptharness.readthedocs.org/en/stable/</a>
+<br /><br />
+</li></ul><p>
+I'm proud of this.  I'm also aware it's not mature [yet], and it's currently missing some functionality.
+</p><p>
+There are some ideas I'd love to explore before 1.0.0:
+</p><ul style="list-style-type: circle;"><li>
+multiple Script objects with threading and separate logs
+<br /><br /></li><li>
+Config Type Definitions
+<br /><br /></li><li>
+rethink how to enable/disable actions.  I could keep mozharness' <code>--add-action clobber --no-upload</code> structure, or play with <code>--actions +clobber -upload</code> or something.  (The - before the upload in the latter might cause argparse issues?)
+<br /><br /></li><li>
+also, explore Maven-style actions (all actions before target action are enabled) and actions with dependencies on other actions.  I prefer keeping each action independent, idempotent, and individually targetable, but I can see someone wanting the other behavior for certain scripts.
+<br /><br /></li><li>
+I've already split out strings from code in a number of places, for unit testing. I'm curious what it would take to make scriptharness localizable, and if there would be demand for it.
+<br /><br /></li><li>
+<a href="https://twitter.com/halbersa">ahal</a> suggested adding structured logging; I'd love to investigate that.
+<br /><br /></li></ul><p>
+I already have 0.2.0 on the brain.  I'd love any feedback or patches.
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=246069" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

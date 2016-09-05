@@ -1,0 +1,77 @@
+---
+layout: post
+title: 'LWR (job scheduling) part i: where we are currently, and what needs to change
+  to scale up'
+---
+
+<p>
+In my entire career, I have never seen Release Engineering scale anywhere <i>near</i> <a href="http://oduinn.com/blog/2013/11/11/infrastructure-load-for-october-2013/">Mozilla's current numbers</a> <a href="#superscript_1_1"><sup>1</sup></a>.  The number of machines is over an order of magnitude larger than the next largest system I've seen.  Our <a href="http://oduinn.com/blog/2013/11/06/now-saving-47-compute-hours-per-checkin/">compute time for a full set of builds and tests</a> is an order of magnitude larger<a href="#superscript_1_2"><sup>2</sup></a>; <i>two</i> orders of magnitude larger in terms of compute-hours-per-day<a href="#superscript_1_3"><sup>3</sup></a>.  No other company I've worked for has even <i>attempted</i> per-checkin builds and tests, due to the scale required; we just lived with developer finger-pointing and shouting matches after every broken build.
+</p><p>
+It's clear to us that <a href="http://oduinn.com/blog/2013/06/26/release-engineering-as-a-force-multiplier-at-google-techtalks/">our infrastructure is a force multiplier</a>; it's also clear that we need to improve the current state of things to scale an additional order of magnitude.
+</p><br />
+<div style="border: thin solid #330000; padding: 1em;">
+<p>
+Our current implementation of buildbot runs our automation, with issues like:
+</p><ul style="list-style-type: circle;"><li style="margin-bottom: 1em;">
+scaling issues:<ul style="list-style-type: square;"><br /><li style="margin-bottom: 1em;">
+hg polling runs on the masters, causing hangs when the set of changes to be parsed is extremely large (e.g., new pushlog, or <a href="https://wiki.mozilla.org/ReleaseEngineering/How_To/Fix_a_hung_scheduler_master">when we re-enable an old scheduler</a>);
+</li><li style="margin-bottom: 1em;">
+log uploads, job status updates, etc. also happen on the masters, adding more load where we can least afford it;
+</li><li style="margin-bottom: 1em;">
+as <a href="http://atlee.ca/blog/posts/a-tale-of-python-profiling-and-optimizing.html">:catlee points out</a>,
+we're holding <i>huge</i> dictionaries in-memory, which results in <a href="http://www.sarahmei.com/blog/2013/11/11/why-you-should-never-use-mongodb/#duplicate-data-duplicate-data">massive duplication of data like this</a>;
+</li><li style="margin-bottom: 1em;">
+buildbot needs a persistent connection with slaves.  This is great for streaming logs, and poor for load and network robustness;
+</li></ul></li><li style="margin-bottom: 1em;">
+we trigger dependent jobs via <a href="http://docs.buildbot.net/0.8.2/sendchange.html">sendchange</a> after a build finishes, which prevents us from querying/acting on a set of builds+tests as a single entity.
+</li></ul></div><br />
+<div style="border: thin solid #330000; padding: 1em;">
+<p>
+Our current configs describe our automation jobs, with issues like:
+</p><ul style="list-style-type: circle;"><li style="margin-bottom: 1em;">
+They are a RelEng timesink, which in turn makes us more of a bottleneck to the rest of the project:<ul style="list-style-type: square;"><br /><li style="margin-bottom: 1em;">
+It's more difficult than it should be to predict what the effect of changes will be without actually running them, which is time consuming;
+</li><li style="margin-bottom: 1em;">
+it's near impossible to deal with oddball requests without a large amount of overhead.
+</li></ul></li><li style="margin-bottom: 1em;">
+The scheduling is inflexible, which increases costs in terms of human time, infrastructure time, and money:<ul style="list-style-type: square;"><br /><li style="margin-bottom: 1em;">
+our current scheduling doesn't allow for things like backfilling test or build jobs on previous commits, forcing us to run a larger set of jobs per-checkin than we would need to otherwise.  This is inefficient in terms of compute time and money;
+</li><li style="margin-bottom: 1em;">
+trying to find ways to jerry-rig alternate scheduling methods for jobs is time consuming.  I see our current efforts as stop-gap solutions until we can roll out something more flexible by design.
+</li></ul></li><li style="margin-bottom: 1em;">
+Since it's difficult to get a full staging environment for RelEng<a href="#superscript_1_4"><sup>4</sup></a>, we're faced with either landing risky patches with minimal testing (risking closing all trees for an indeterminate amount of time), or spending an inordinate amount of time setting up a rough staging environment that may or may not be giving accurate results, depending on whether you typoed something or missed a step.
+</li></ul></div><br /><p>
+Work is already well under way to move logic out of buildbotcustom, into <a href="http://escapewindow.dreamwidth.org/tag/mozharness">mozharness</a>.  This is the "how do we run a job" to the scheduling's "when" and "where".  As the build and test logic becomes more independent of the scheduling, we gain flexibility as to how we schedule jobs.
+</p><p>
+Our current implementation of buildbot cannot scale to the degree we need it to.  An increase of an order of magnitude would mean <i>tens</i> of thousands of build+test slaves.  <i>One million</i> jobs a day.  That scale will help the project to develop faster, test faster and more thoroughly, and release better products that are simultaneously more stable and feature-filled.  If our infrastructure is a force multiplier, applying a multiplier to the multiplier should result in massive change for good.
+</p><p>
+If we also make our configs cleaner, we can be smarter about what we schedule, and when.  A 10x increase in our capacity would become an even larger amount of headroom than otherwise.  Discussions about what we run, and how often, then become more about business value weighed against infrastructure- and human- time costs, rather than about infrastructure limits.
+</p><p>
+We've been talking about this for years, now, but product 1.0's and other external time pressures have kept it on the back burner.  With no 1.0's on the horizon and the ability to measure <a href="http://oduinn.com/blog/2013/11/20/the-financial-cost-of-a-checkin-part-1/">the cost of things</a>, hopefully we will finally be able to prioritize work on scheduling.
+</p><p>
+In part 2, I'm going to discuss a high-level overview of our plans and ideas for LWR, our next-gen scheduling system.<br />
+In part 3, I'm going to drill down into some hand-wavy LWR specifics, including what we can roll out in phase 1, which is <a href="http://coop.deadsquid.com/2013/11/dispatches-from-the-releng-team-week-tuesday/#more-25731">what we were discussing at length last Tuesday</a>.  I didn't think I could dive into those specifics without giving some background context first.
+</p><br /><hr width="100" align="left" />
+<p>
+<a name="superscript_1_1"></a>
+<sup>1</sup> <a href="http://oduinn.com/blog/">:joduinn</a> <i>has</i> seen scale like this, but I think Mozilla has surpassed those numbers.
+</p><p>
+<a name="superscript_1_2"></a>
+<sup>2</sup> We have a <i>much</i> larger matrix of (num_build_platforms &middot; num_build_types) + (num_test_platforms &middot; num_test_types) than any other project I've been a part of.
+</p><p>
+<a name="superscript_1_3"></a>
+<sup>3</sup> The workflows I've seen elsewhere have included
+</p><ol style="list-style-type: lower-alpha"><li style="margin-bottom: 1em;">
+on-demand (only build when someone pushes a button),
+</li><li style="margin-bottom: 1em;">
+nightly- or periodic- only,
+</li><li style="margin-bottom: 1em;">
+<a href="http://escapewindow.dreamwidth.org/218573.html">the tinderbox model</a> where each build restarts after finishing, or
+</li><li style="margin-bottom: 1em;">
+a combination of the above.
+</li></ol><p>
+With a smaller number of builds and tests per set, and a much less frequent rate of running those sets of builds and tests, the total number of compute hours per-day is significantly lower.
+</p><p>
+<a name="superscript_1_4"></a>
+<sup>4</sup> By "full staging environment", here, I'm not just including a single standalone buildbot master and a single buildbot slave.  Depending on what we need to test, this can include a staging instance of self-serve, buildapi, statusdb, clobberer, slavealloc, tbpl, ftp.m.o, graphserver, hg repos (sometimes read-only, but sometimes read-write, e.g. staging releases which tag the repos), sometimes git repos, downstream test master + test slaves, etc. etc., and whatever staging systems we set up in this environment need to communicate with each other and not pollute production systems.
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=242767" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

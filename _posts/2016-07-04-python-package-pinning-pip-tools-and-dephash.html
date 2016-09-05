@@ -1,0 +1,82 @@
+---
+layout: post
+title: 'python package pinning: pip-tools and dephash'
+---
+
+<h4>
+discovering pip tools
+</h4><p>
+Last week, I wrote a long blog draft about python package pinning.  Then I found <a href="http://nvie.com/posts/pin-your-packages/">this</a>.  It's well written, and covers many of the points I wanted to make.  The author perfectly summarizes the divide between package <i>development</i> and package <i>deployment to production</i>:
+</p><center><table border="0" cellpadding="5" style="background-color: #dddddd"><tr><td><center>
+Don't pin by default when you're building libraries! Only use pinning for end products.</center></td></tr></table></center><p>
+So I dug deeper.  <a href="https://github.com/nvie/pip-tools/issues/303"><code>pip-tools #303</code></a> perfectly describes the problem I was trying to solve:
+</p><blockquote>Given a minimal dependency list,
+<ol><li>generate a full, expanded dependency list, and</li>
+<li>pin that full dependency list by version and hash.</li></ol></blockquote><p>
+Fixing <code>pip-tools #303</code> and upstreaming seemed like the ideal solution.
+</p><p>
+<strike>However, <a href="https://github.com/nvie/pip-tools/issues/358">pip-tools is broken with pip 8.1.2</a>.</strike>  The Python Packaging Authority (PyPA) states that <a href="https://github.com/pypa/pip/issues/3687#issuecomment-219299825">pip's public API is the CLI</a>, and <code>pip-tools</code> could <a href="https://github.com/pypa/pip/issues/3687#issuecomment-219297966">potentially break with every new pip patch release</a>.  This is solvable by either <a href="https://github.com/nvie/pip-tools/issues/358#issuecomment-219984145">using pypa/packaging directly</a>, or switching <code>pip-tools</code> to use the CLI.  That's considerably more work than just integrating hashing capability into <code>pip-tools</code>.  (<b>[EDIT]</b> pip-tools now works with pip 8.1.2, but shoehorning hashes into it is a non-trivial task.  I do hope someone tackles it though.) 
+</p><p>
+But I had already whipped up a quick'n'dirty python script that used the pip CLI.  (I had assumed that bypassing the internal API was a hack, but evidently this is the supported way of doing things.)  So, back to the original blog post, but much shorter:
+</p><h4>
+<a name="dephash_gen">dephash gen</a>
+</h4><p>
+<code>dephash gen</code> takes a minimal requirements file, and generates an expanded dependency list, pinned by version and hash.
+</p><blockquote><pre>
+$ cat requirements-dev.txt
+
+requests
+arrow
+
+$ dephash gen requirements-dev.txt &gt; requirements-prod.txt
+
+$ cat requirements-prod.txt
+
+# Generated from dephash.py + hashin.py
+arrow==0.8.0 \
+    --hash=sha512:b6c01970d408e1169d042f593859577...
+python-dateutil==2.5.3 \
+    --hash=sha512:413b935321f0a65fd8e8ba49990acd5... \
+    --hash=sha512:d8e28dad57ea85663962f4518faea0e... \
+    --hash=sha512:107ff2eb6f0715996061262b70844ec...
+requests==2.10.0 \
+    --hash=sha512:e5b7d20c4d692b2655c13fa177b8462... \
+    --hash=sha512:05c6a1a742d31511ca4d3f39534e3e0...
+six==1.10.0 \
+    --hash=sha512:a41b40b720c5267e4a47ffb98cdc792... \
+    --hash=sha512:9a53b7bc8f7e8b358c930eaecf91cc5...
+</pre></blockquote><p>
+Developers can work against <code>requirements-dev.txt</code>, with the latest available dependencies.  At the same time, production can be pinned against specific package versions+hashes for stability and security.
+</p><h4>
+<a name="dephash_outdated">dephash outdated</a>
+</h4><p>
+<code>dephash outdated PATH</code> checks whether <code>PATH</code> contains outdated packages.  <code>PATH</code> can be a requirements file or virtualenv.
+</p><blockquote><pre>
+$ cat requirements-outdated.txt
+
+six==1.9.0
+
+$ dephash outdated requirements-outdated.txt
+
+Found outdated packages in requirements-outdated.txt:
+six (1.9.0) - Latest: 1.10.0 [wheel]
+</pre></blockquote><p>
+or,
+</p><blockquote><pre>
+$ virtualenv -q venv
+
+$ venv/bin/pip install -q -r requirements-outdated.txt
+
+$ dephash outdated venv
+
+Found outdated packages in venv:
+six (1.9.0) - Latest: 1.10.0 [wheel]
+</pre></blockquote><p>
+This just uses <code>pip list --outdated</code> on the backend.  I'm tentatively thinking a whitelist of known-outdated dependencies might help here, but I haven't written it yet.
+</p><h4>
+wrapup
+</h4><p>
+I still think the glorious future involves fixing <a href="https://github.com/nvie/pip-tools/issues/303">pip-tools #303</a> and getting <code>pip-tools</code> pointed at a supported pypa API.  And/or getting <code>hashin</code> or <code>pip-tools</code> upstreamed into <code>pip</code>.  But in the meantime, there's <a href="https://github.com/escapewindow/dephash"><code>dephash</code></a>.
+</p><p>
+(I'm leaving my package vendoring musings and python package wishlist for future blogpost(s).)
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=247093" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

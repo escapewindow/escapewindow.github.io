@@ -1,0 +1,21 @@
+---
+layout: post
+title: scriptharness 0.2.0
+---
+
+<p>
+I've been getting some good feedback about scriptharness 0.1.0; thank you.  I listed the 0.2.0 highlights and changes in the <a href="http://python-scriptharness.readthedocs.org/en/stable/releasenotes/">0.2.0 Release Notes</a>, but wanted to mention a few things here.
+</p><p>
+First, mozharness' config had the flexibility of accepting any arbitrary key/value pairs from various sources (initial_config, commandline options, config files...).  However, it wasn't always clear what each config variable was for, or if it was required, or if the config was valid.  I filed <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=699343">bug 699343</a> back in 2011, but didn't know how to tackle it then.  I believe I have the solution now, with <a href="http://python-scriptharness.readthedocs.org/en/stable/config/#configtemplates">ConfigTemplates</a>.
+</p><p>
+Second, 0.1.0 was definitely lacking a <code>run_command()</code> and <code>get_output_from_command()</code> analogs.  0.2.0 has <code>Command</code> for just running+logging a command, <code>ParsedCommand</code> for parsing the output of a command, and <code>Output</code> for getting the output from a command, as well as <code>run()</code>, <code>parse()</code>, <code>get_output()</code>, and <code>get_text_output()</code> shortcut functions to instantiate the objects and run them for you.  (Docs are <a href="http://python-scriptharness.readthedocs.org/en/stable/commands/">here</a>.)  Each of these supports cross-platform <code>output_timeout</code>s and <code>max_timeout</code>s in both python 2.7 and python3, thanks to the multiprocessing module.  As a bonus, I was able to add <a href="http://python-scriptharness.readthedocs.org/en/stable/commands/#outputbuffer-and-context-lines">context line support</a> to the <code>ErrorList</code>s for <code>ParsedCommand</code>.  This was also a want <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=688338">since 2011</a>.
+</p><p>
+I fleshed out some more documentation and populated the <a href="https://github.com/scriptharness/python-scriptharness/issues/">scriptharness issues</a> with my todo list.
+</p><p>
+I think I know what I have in mind for 0.3.0, but feedback is definitely welcome!
+</p>
+<ul>
+<li>0.2.0 Release Notes: <a href="http://python-scriptharness.readthedocs.org/en/stable/releasenotes/">http://python-scriptharness.readthedocs.org/en/stable/releasenotes/</a><br /></li>
+<li>PyPI: <a href="https://pypi.python.org/pypi/scriptharness/0.2.0">https://pypi.python.org/pypi/scriptharness/0.2.0</a><br /></li>
+<li>GitHub: <a href="https://github.com/scriptharness/python-scriptharness/releases/tag/v0.2.0">https://github.com/scriptharness/python-scriptharness/releases/tag/v0.2.0</a><br /></li>
+<li>Read the Docs: <a href="http://python-scriptharness.readthedocs.org/en/stable">http://python-scriptharness.readthedocs.org/en/stable</a><br /></li></ul><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=246416" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

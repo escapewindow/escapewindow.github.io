@@ -1,0 +1,46 @@
+---
+layout: post
+title: on leaving mozilla
+---
+
+<p>
+Today's my last day at Mozilla.  It wasn't an easy decision to move on; this is the best team I've been a part of in my career.  And working at a company with such <a href="https://www.mozilla.org/en-US/about/manifesto/">idealistic principles</a> and the capacity to make a difference has been a privilege.
+</p><p>
+Looking back at the past five-and-three-quarter years:
+</p><ul><li>
+I wrote <a href="http://escapewindow.dreamwidth.org/tag/mozharness">mozharness</a>, a versatile scripting harness.  I strongly believe in its <a href="http://escapewindow.dreamwidth.org/223757.html">three core concepts</a>: <a href="http://escapewindow.dreamwidth.org/230482.html">versatile locking config</a>; <a href="http://escapewindow.dreamwidth.org/230853.html">full logging</a>; <a href="http://escapewindow.dreamwidth.org/231122.html">modularity</a>.
+<br /><br /><ul><li>
+By my count, over 85% of our buildbot builders (build+test job types) are currently running through mozharness scripts.  Given over <a href="https://twitter.com/lxt/status/486213252179705857">100k build+test jobs in a day</a>, that's a sizeable amount.  So many people across so many teams contributed to this, and we're not done yet.  Once <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=858797">desktop builds are in mozharness</a> and we <a href="https://groups.google.com/forum/#!topic/mozilla.dev.planning/knweFDlUk84">discontinue Android 2.2 support</a>, that number should be close to, if not over, 90%.
+</li></ul>
+<br /><br /></li><li>
+I helped FirefoxOS (b2g) ship, and it's making waves in the industry.  Internally, the release processes are well on the path to maturing and stabilizing, and b2g is now riding the trains.
+<br /><br /><ul><li>
+Merge day: Releng took over ownership of merge day, and b2g increased its complexity exponentially.
+<blockquote class="twitter-tweet" width="350" lang="en"><p>Listening to <a href="https://twitter.com/escapewindow">@escapewindow</a> explain merge day processes is like looking Cthulhu in the eyes. Sanity draining away rapidly</p>&mdash; Laura Thomson (@lxt) <a href="https://twitter.com/lxt/statuses/460947852177326082">April 29, 2014</a></blockquote>
+
+I don't think it's quite <i>that</i> bad :)  I whittled it down from requiring someone's full mental capacity for three out of every six weeks, to several days of precisely <a href="https://wiki.mozilla.org/ReleaseEngineering/Merge_Duty/Steps">following directions</a>.
+<br /><br /></li><li>
+I rewrote <a href="http://escapewindow.dreamwidth.org/tag/vcs-sync">vcs-sync</a> to be more maintainable and robust, and to support <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=847727">gecko-dev and gecko-projects</a>.  Being able to support both mercurial and git across many hundreds of repos has become a core part of our development and automation, primarily because of b2g.  The best thing you can say about a mission critical piece of infrastructure like this is that you can sleep through the night or take off for the weekend without worrying if it'll break.  Or go on vacation for 3 1/2 weeks, <a href="https://www.flickr.com/photos/drkscrtlv/sets/72157642720199943/">far from civilization</a>, without feeling guilty or worried.
+</li></ul>
+<br /><br /></li><li>
+I helped ship three <a href="http://escapewindow.dreamwidth.org/tag/fennec">mobile</a> 1.0's.  I learned a ton, and I don't think I could have gotten through it by myself; <a href="http://oduinn.com">John</a> and the team helped me through this immensely.
+<br /><br /><ul><li>
+On mobile, we went from one or two builds on a branch to full tier-1 support: builds and tests on checkin across all of our integration-, release-, and project- branches. And mobile is riding the trains.
+<br /><br /></li><li>
+We <a href="http://oduinn.com/blog/2011/07/01/behind-the-scene-mechanics-of-firefox5-0-fennec5-0/">Sim-shipped 5.0</a> on Firefox desktop and mobile off the same changeset.  Firefox 6.0b2, and every release since then, <a href="http://escapewindow.dreamwidth.org/229122.html">was built off the same automation for desktop and mobile</a>.  Those were total team efforts.
+<br /><br /></li><li>
+I will be remembered for the <a href="http://escapewindow.dreamwidth.org/205930.html">mobile pedalboard</a>.  When we talked to other people in the industry, this was more on-device mobile test automation than they had ever seen or heard of; their solutions all revolved around manual QA.
+<center>
+<lj-embed id="90" />
+<br /><br />
+<a href="https://www.flickr.com/photos/drkscrtlv/sets/72157619162182878">(full set)</a>
+</center>
+<br /><br /></li><li>
+And they are like effin bunnies; we later moved on to <a href="http://oduinn.com/blog/2010/02/11/unveiling-mozillas-faraday-cage/">shoe rack bunnies</a>, <a href="https://blog.mozilla.org/it/2013/01/04/mozpool/">rackmounted bunnies</a>, and now more and more <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=1034055">emulator-driven bunnies</a> in the cloud, each numbering in the hundreds or more.  I've been hands off here for quite a while; the team has really improved things leaps and bounds over my crude initial attempts.
+</li></ul>
+<br /><br /></li><li>
+I brainstormed next-gen build infrastructure.  I started blogging about this back in <a href="http://escapewindow.dreamwidth.org/207062.html">January 2009</a>, based largely around my previous webapp+db design elsewhere, but I think my <a href="http://escapewindow.dreamwidth.org/tag/lwr">LWR posts in Dec 2013</a> had more of an impact.  A lot of those ideas ended up in <a href="http://docs.taskcluster.net/">TaskCluster</a>; mozharness scripts will contain the bulk of the client-side logic.  We'll see how it all works when TaskCluster starts taking on a significant percentage of the current buildbot load :)
+</li></ul>
+<p>
+I will stay a <a href="https://mozillians.org/en-US/u/aki/">Mozillian</a>, and I'm looking forward to see where we can go from here!
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=245416" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

@@ -1,0 +1,221 @@
+---
+layout: post
+title: generically packaged tools
+---
+
+<ol style="list-style-type: lower-roman">
+<li><a href="#tl;dr">tl;dr</a></li>
+<li><a href="#internal_benefits">internal benefits to generically packaged tools</a></li>
+<li><a href="#tinderbox">learning from history: tinderbox</a></li>
+<li><a href="#mozharness_and_scriptharness">mozharness and scriptharness</a></li>
+<li><a href="#treeherder_and_taskcluster">treeherder and taskcluster</a></li>
+<li><a href="#other_tools">other tools</a></li>
+</ol>
+
+<a name="tl;dr"></a>
+<div style="border: thin solid #110000; padding-left: 1em; padding-right: 1em;">
+<h4>tl;dr</h4>
+<p>
+One of the reasons I'm back at Mozilla is to work in-depth with some exciting new tools and infrastructure, at scale.  However, I wish these tools could be used equally well by employees and non-employees.  I see some efforts to improve this.  But if this is really important to us, we need to make it a point of emphasis.
+</p><p>
+If we do this, we can benefit from a healthier, extended community.  There are also internal benefits to making our tools packaged in a generic way.  I'll go into these in the next section.
+</p><p>
+I did start to contact some tool maintainers, and so far the response is good.  I'll continue doing so.  Hopefully I can write a followup blog post about how efforts are under way to make generically packaged tools a reality.
+</p>
+</div>
+<br />
+
+<a name="internal_benefits"></a>
+<div style="border: thin solid #000011; padding-left: 1em; padding-right: 1em;">
+<h4>internal benefits to generically packaged tools</h4>
+<p>
+Besides the strengthened community, there are other internal benefits.
+</p><ul><li>
+<b>upgrades</b>
+<p>
+Once installation is packaged and automated, an upgrade to a service might be:
+</p><ul><li>
+spin up a new service
+</li><li>
+test it
+</li><li>
+send over some traffic (applicable if the service is load balanced)
+</li><li>
+go/no-go
+</li><li>
+cut over to the appropriate service and turn off the other one.
+</li></ul><p>
+This entire process can be fully automated.  Once this process is smooth enough, upgrading a service can be seamless and relatively worry free.
+</p></li><li>
+<b>disaster recovery</b>
+<p>
+If a service is only installable manually, a disaster recovery scenario might involve people working around the clock to reinstall a service.
+</p><p>
+Once the installation is automated and configurable, this changes.  A cold backup solution might be similar to the above upgrade scenario.  If disaster strikes, have someone install a new one from the automation, or have a backup instance already installed, ready for someone to switch over.
+</p><p>
+A hot backup solution might involve having multiple load balanced services running across regions, with automatic failovers.  The automated install helps guarantee that each node in the cluster is configured correctly, without human error.
+</p></li><li>
+<b>good first bugs</b>
+<p>
+(or intern projects, or GSOC projects, or...)
+</p><p>
+The more special-snowflake and Mozilla-specific our tools are, the more likely the tool will be tied closely to other Mozilla-specific services, so a seemingly simple change might require touching many different codebases.  These types of tools are also more likely to require VPN or special LDAP access that present barriers to new contributors.
+</p><p>
+If a new contributor is able to install tools locally, that guarantees that they can work on standalone bugs/projects involving those tools.  And successful good first bugs and intern/GSOC type projects directly lead to a stronger contributor base.
+</p></li><li>
+<b>special projects</b>
+<p>
+At various team work weeks years past, we brainstormed being able to launch entire chunks of infrastructure up in self-contained units.  These could handle project branch type work.  When the code was merged back into trunk, we could archive the data and shut down the instances used.
+</p><p>
+This concept also works for special projects: things that don't fit within the standard workflow.
+</p><p>
+If we can spin up services in a separate, network isolated area, riskier or special-requirement work (whether in terms of access control, user permissions, partner secrets, etc) could happen there without affecting production.
+</p></li><li>
+<b>self-testing</b>
+<p>
+Installing the package from scratch is the test for the generic packaging feature.  The more we install it, the smaller the window of changes we need to inspect for installation bustage.  This is the same as any other software feature.
+</p><p>
+Having an install test for each tool gives us reassurances that the next time we need to install the service (upgrade, disaster recovery, etc.) it'll work.
+</p></li></ul>
+</div>
+<br />
+
+<a name="tinderbox"></a>
+<div style="border: thin solid #220000; padding-left: 1em; padding-right: 1em;">
+<h4>learning from history: tinderbox</h4>
+<p>
+In 2000, a developer asked me to install tinderbox, a continuous integration tool written and used at Netscape.  It would allow us see the state of the tree, and minimize bustage.
+</p><p>
+One of the first things I saw was <a href="https://github.com/mozilla/tinderbox/blob/4010621ea541227a841f3ea4ca5d4f060d831661/README.CVS#L4">this disclaimer</a>:
+</p>
+<blockquote>
+<pre>
+This is not very well packaged code.  It's not packaged at all.  Don't
+come here expecting something you plop in a directory, twiddle a few
+things, and you're off and using it.  Much work has to be done to get
+there.  We'd like to get there, but it wasn't clear when that would be,
+and so we decided to let people see it first.
+
+Don't believe for a minute that you can use this stuff without first
+understanding most of the code.
+</pre>
+</blockquote>
+<p>
+I managed to slog through the steps and get a working tinderbox/bonsai/mxr install up and running.  However, since then, I've met a number of other people who had tried and given up.
+</p><p>
+I ended up joining Netscape in 2001.  (My history with tinderbox helped me in my interview.) An external contributor visited and presented <code>tinderbox2</code> to the engineering team.  It was configurable.  It was modular.  It removed Netscape-centric hardcodes.
+</p><p>
+However, it didn't fully support all tinderbox1 features, and certain default behaviors were changed by design.  Beyond that, Netscape employees already had fully functional, well maintained instances that worked well for us.  Rather than sinking time into extending tinderbox2 to cover our needs, we ended up staying with the disclaimered, unpackaged tinderbox1.  And that was the version running at tinderbox.mozilla.org, until <a href="http://oduinn.com/blog/2014/06/04/farewell-to-tinderbox/">its death in May 2014</a>.
+</p><p>
+For a company focused primarily on shipping a browser, shipping the tools used to build that browser isn't necessarily a priority.  However, there were some opportunity costs:
+</p><ul><li>
+Tinderbox1 continued to suffer from the same large barrier of entry, stunting its growth.
+</li><li>
+I don't know how widely tinderbox2 was used, but I imagine adoption at Netscape would have been a plus for the project.  (I did end up installing tinderbox2 post-Netscape.)
+</li><li>
+A larger, healthier community could have result in upstreamed patches, and a stronger overall project in the long run.
+</li><li>
+People who use the same toolset may become external contributors or employees to the project in general (like me).  People who have poor impressions of a toolset may be less interested in joining as contributors or employees.
+</li></ul>
+</div>
+<br />
+
+<a name="mozharness_and_scriptharness"></a>
+<div style="border: thin solid #001100; padding-left: 1em; padding-right: 1em;">
+<h4>mozharness and scriptharness</h4>
+<p>
+In my previous stint at Mozilla, I wrote mozharness, which is a python framework for scripts.
+</p><p>
+I intentionally kept mozilla-specific code under <code>mozharness.mozilla</code> and generic mozharness code under <code>mozharness.base</code>.  The idea was to make it easier for external users to grab a copy of mozharness and write their own scripts and modules for a non-Mozilla project.  (By "non-Mozilla" and "external user", I mean anyone who wants to automate software anywhere.)
+</p><p>
+However, after I left Mozilla, I didn't use mozharness for anything.  Why not?
+</p><ul><li>
+There's a non-trivial learning curve for people new to the project, and the benefits of adopting mozharness are most apparent when there's a certain level of adoption.  I was working at time scales that didn't necessarily lend themselves to this.
+</li><li>
+I intentionally kept mozharness clone-and-run.  I think this was the right model at the time, to lower the barrier for using mozharness until it had reached a certain level of adoption.  Clone-and-run made it easier to use mozharness in buildbot, but makes it harder to install or use just the <code>mozharness.base</code> module.
+</li><li>
+We did our best to keep Mozilla-isms out of <code>mozharness.base</code> via review.  However, this would have been more successful with either an external contributer speaking up before we broke their usage model, or automated tests, or both.
+</li></ul><p>
+So even with the best intentions in mind, I had ended up putting roadblocks in the way of external users.  I didn't realize their scope until I was fully in the mindset of an external user myself.
+</p><p>
+I wrote scriptharness to try to address these problems (among others):
+</p><ul><li>
+I revisited certain decisions that made mozharness less approachable.  The mixins and monolithic Script object.  Requiring a locked config.  Missing docstrings and tests.
+</li><li>
+I made scriptharness resources available at standard locations (generic packages on pypi, source at github, full docs at readthedocs).
+</li><li>
+Since it's a self-contained package, it's usable here or elsewhere.  Since it's written to solve a generic problem rather than a Mozilla-specific problem, it's unencumbered by Mozilla-specific solutions.
+</li></ul>
+I'd like to backport some of the better ideas from scriptharness to mozharness, to address some of these issues.
+
+</div>
+<br />
+
+<a name="treeherder_and_taskcluster"></a>
+<div style="border: thin solid #002200; padding-left: 1em; padding-right: 1em;">
+<h4>treeherder and taskcluster</h4>
+<p>
+After I left Mozilla, on several occasions we wanted to use other Mozilla tools in a non-Mozilla environment.  As a general rule, this didn't work.
+</p><ul><li>
+<b>Continuous Integration (CI) Dashboard</b>
+<p>
+We had multiple Jenkins servers, each with a partial picture of our set of build+test jobs.  Figuring out the state of the code base was complex and a specialized skill. Why couldn't we have one dashboard showing a complete view?
+</p><p>
+I took a look at Treeherder.  It has improved upon the original TBPL, but is designed to work specifically with Mozilla's services and workflows.  I found it difficult to set up outside of a Mozilla environment.
+</p></li><li>
+<b>CI Infrastructure</b>
+<p>
+We were investigating other open source CI solutions.  There are many solutions for server-side apps, or linux-only solutions, or cross-platform at small- to medium- scale.  TaskCluster is the only one I know of that's cross-platform at massive scale.
+</p><p>
+When we looked, all the tutorials and docs had to do with using the existing Mozilla production instance, which required a <code>mozilla.com</code> email address at the time.  There are no docs for setting up TaskCluster itself.
+</p><p>
+(Spoiler: I hear it may be a 2H project :D :D :D )
+</p></li><li>
+<b>Single Sign-On</b>
+<p>
+An open source, trusted SSO solution sounded like a good thing to implement.
+</p><p>
+However, we found out Persona has been EOL'd.  We didn't look too closely at the implementation details after that.
+</p></li></ul><p>
+(These are just the tools I tried to use in my 1 1/2 years away from Mozilla.  There are more tools that might be useful to the outside world.  I'll go into those in the next section.)
+</p><p>
+There are reasons behind each of these, and they may make a lot of sense internally.  I'm not trying to place any blame or point fingers.  I'm only raising the question of whether our future plans include packaging our tools for outside use, and if not, why not?
+</p><p>
+We're facing a similar decision to Netscape's.  What's important?  We can say we're a company that ships a browser, and the tools only exist for that purpose.  Or we can put efforts towards making these tools useful in many environments.  Generically packaged, with documentation that doesn't start with a disclaimer about how difficult they are to set up.
+</p><p>
+It's easy to say we'd like to, but we're too busy with ______.  That's the gist of the tinderbox disclaimer.  There are costs to designing and maintaining tools for use outside of one's subset of needs.  But as long as packaging tools for outside use is not a point of emphasis, we'll maintain the status quo.
+</p>
+</div>
+<br />
+
+
+<a name="other_tools"></a>
+<div style="border: thin solid #002200; padding-left: 1em; padding-right: 1em;">
+<h4>other tools</h4>
+<p>
+The above were just the tools that we tried to install.  I asked around and built a list of Mozilla tools that might be useful to the outside world.  I'm not sure if I have all the details correct; please correct me if I'm wrong!
+</p><ul><li>
+mach - if all the mozilla-central-specific functions were moved to libraries, could this be useful for others?
+</li><li>
+<a href="https://wiki.mozilla.org/Auto-tools/Projects/BugHunter">bughunter</a> - I don't know enough to say. This looks like a crash/assertion finder, tying into Socorro and bugzilla.
+</li><li>
+balrog - this now has docker support, which is promising for potential outside use.
+</li><li>
+marionette (already used by others)
+</li><li>
+reftest (already used by others)
+</li><li>
+pulse - this is a taskcluster dep.
+</li><li>
+Bugzilla - I've seen lots of instances successfully used at many other companies.  Its installation docs are <a href="https://bugzilla.readthedocs.org/en/latest/installing/">here</a>.
+</li><li>
+I also hear that Socorro is successfully used at a number of other companies.
+</li></ul><p>
+So we already have some success here.  I'd love to see it extended -- more tools, and more use cases, e.g. supporting bugzilla or jira as the bug db backend when applicable.
+</p>
+</div>
+<br />
+
+<p>
+I don't know how much demand there will be, if we do end up packaging these tools in a way that others can use them.  But if we don't package them, we may never know.  And I do know that there are entire companies built around shipping tools like these.  We don't have to drop any existing goals on the floor to chase this dream, but I think it's worth pursuing in the future.
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=247018" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

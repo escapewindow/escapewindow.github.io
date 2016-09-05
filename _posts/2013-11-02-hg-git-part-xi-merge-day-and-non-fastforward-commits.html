@@ -1,0 +1,14 @@
+---
+layout: post
+title: 'hg-git part xi: merge day and non-fastforward commits'
+---
+
+<p>
+<small>(you missed these, a tiny bit, didn't you.)</small>
+</p><p>
+As I've mentioned <a href="http://escapewindow.dreamwidth.org/241453.html">here</a> and <a href="http://escapewindow.dreamwidth.org/239918.html">here</a>, non-fastforward commits are problematic for downstream partners, and are to be strictly avoided.  And as I mentioned <a href="http://escapewindow.dreamwidth.org/238476.html#what_is_gecko_git">here</a>, we had identified that our original merge day mechanics introduced non-fastforward commits to our Repositories of Record on a periodic basis.
+</p><p>
+I was under the impression that this was a Solved Problem, but I noticed a non-fastforward commit in mozilla-release after the mozilla-beta -&gt; mozilla-release merge for Firefox 25.0 (thanks to the vcs-sync emails I'm getting now).  I hadn't updated the instructions on the <a href="https://wiki.mozilla.org/Release_Management/Merge_Documentation">Merge Documentation wiki page</a>, and the merge scripts followed that document.
+</p><p>
+The scripts are now available in <a href="https://github.com/mozilla/relman-tools">this github repo</a>.  One <a href="https://github.com/mozilla/relman-tools/pull/1">pull request</a> later, plus <a href="http://lukasblakk.com/">:lsblakk</a>'s fixes from the long Firefox 26 merge day, and we now use <code>hg debugsetparents</code> to "merge" in old heads in a fast-forwardable way.  One more step towards our goal.
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=241704" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

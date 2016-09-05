@@ -1,0 +1,93 @@
+---
+layout: post
+title: 'LWR (job scheduling) part ii: a high level overview'
+---
+
+<a name="compute_farm"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>compute farm</b>
+</p><p>
+I think of all the ideas we've brainstormed, the one I'm most drawn to is the idea that our automation infrastructure shouldn't just be a build farm feeding into a test farm.  It should be a compute farm, capable of running a superset of tasks including, but not restricted to, builds and tests.
+</p><p>
+Once we made that leap, it wasn't too hard to imagine the compute farm running its own maintenance tasks, or doing its own dependency scheduling.  Or running any scriptable task we need it to.
+</p><p>
+This perspective also guides the schematics; generic scheduling, generic job running.  This job only happens to be a Firefox desktop build, a Firefox mobile l10n repack, or a Firefox OS emulator test.  This graph only happens to be the set of builds and tests that we want to spawn per-checkin.  But it's not limited to that.
+</p>
+</div><br />
+
+<a name="dependency_graph"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>dependency graph</b> (<a href="http://atlee.ca/blog/posts/next-gen-job-scheduling.html"><i>cf.</i></a>)
+</p><p>
+Currently, when we detect a new checkin, we kick off new builds.  When they successfully upload, they create new dependent jobs (tests), in a cascading waterfall scheduling method.  This works, but is hard to predict, and it doesn't lend itself to backfilling of unscheduled jobs, or knowing when the entire set of builds and tests have finished.
+</p><p>
+Instead, if we create a graph of all builds and tests at the beginning, with dependencies marked, we get these nice properties:
+</p><ul style="list-style-type: circle;"><li style="margin-bottom: 1em;">
+Scheduling changes can be made, debugged, and verified without actually needing to hook it up into a full system; the changes will be visible in the new graph.
+</li><li style="margin-bottom: 1em;">
+It becomes much easier to answer the question of what we expect to run, when, and where.
+</li><li style="margin-bottom: 1em;">
+If we initially mark certain jobs in the graph as inactive, we can backfill those jobs very easily, by later marking them as active.
+</li><li style="margin-bottom: 1em;">
+We are able to create jobs that run at the end of full sets of builds and tests, to run analyses or cleanup tasks. Or "smoketest" jobs that run before any other tests are run, to make sure what we're testing is worth testing further.  Or "breakpoint" jobs that pause the graph before proceeding, until someone or something marks that job as finished.
+</li><li style="margin-bottom: 1em;">
+If the graph is viewable and editable, it becomes much easier to toggle specific jobs on or off, or requeue a job with or without changes.  Perhaps in a web app.
+</li></ul>
+</div><br />
+
+<a name="web_app"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>web app</b>
+</p><p>
+The dependency graph could potentially be edited, either before it's submitted, or as runtime changes to pending or re-queued jobs.  Given a user-friendly web app that allows you to visualize the graph, and drill down into each job to modify it, we can make scheduling even more flexible.
+</p><ul style="list-style-type: circle"><li style="margin-bottom: 1em;">
+TryChooser could go from a checkin-comment-based set of flags to a something viewable and editable before you submit the graph.  Per-job toggles, certainly (just mochitest-3 on windows64 debug, please, but mochitest-2 through 4 on the other platforms).
+</li><li style="margin-bottom: 1em;">
+If the repository + revision were settable fields in the web app, we could potentially get rid of the multi-headed Try repository altogether (point to a user repo and revision, and build from there).
+</li><li style="margin-bottom: 1em;">
+Some project branches might not need per-checkin or nightly jobs at all, given a convenient way to trigger builds and tests against any revision at will.
+</li><li style="margin-bottom: 1em;">
+Given the ability to specify where the job logic comes from (e.g., mozharness repo and revision), people working on the automation itself can test their changes before rolling them out, especially if there are ways to send the output of jobs (job status, artifact uploads, etc.) to an alternate location.  This vastly reduces the need for a completely separate "staging" area that quickly falls out of date.  Faster iteration on automation, faster turnaround.
+</li></ul>
+</div><br />
+
+<a name="community_job_status"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>community job status</b>
+</p><p>
+One feature we lost with the Tinderbox EOL was the ability for any community member to contribute job status. We'd like to get it back.  It's useful for people to be able to set up their own processes and have them show up in TBPL, or other status queries and dashboards.
+</p><p>
+Given the scale we're targeting, it's not immediately clear that a community member's machine(s) would be able to make a dent in the pool.  However, other configurations not supported by the compute farm would potentially have immense value: alternate toolchains.  Alternate OSes.  Alternate hardware, especially since the bulk of the compute farm will be virtual.  Run your own build or test (or other job) and send your status to the appropriate API.
+</p><p>
+As for LWR dependency graphs potentially triggering community-run machines:  if we had jobs that are useful in aggregate, like a SETI at home communal type job, or intermittent test runner/crasher type jobs, those could be candidates.  Or if we wanted to be able to trigger a community alternate-configuration job from the web app. Either a <a href="http://escapewindow.dreamwidth.org/207062.html#cutid4">pull-not-push model</a>, or a messaging model where community members can set up listeners, could work here.
+</p><p>
+Since we're talking massive scale, if the jobs in question are runnable on the compute farm, perhaps the best route would be contributing scripts to run.  Releng-as-a-Service.
+</p>
+</div><br />
+
+<a name="RaaS"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>Releng-as-a-Service</b>
+</p><p>
+Release Engineering is a bottleneck.  I think <a href="https://blog.mozilla.org/ted/">Ted</a> once said that everyone needs something from RelEng; that's quite possibly true.  We've been trying to reverse this trend by empowering others to write or modify their own mozharness scripts: the <a href="https://wiki.mozilla.org/Auto-tools">A-team</a>, <a href="https://blog.mozilla.org/sfink/">:sfink</a>, <a href="https://medium.com/@garethaye">:gaye</a>, <a href="https://blog.mozilla.org/graydon/">:graydon</a> have all been doing so.  More bandwidth.  Less bottleneck.
+</p><p>
+We've already established that compute load on a small subset of servers doesn't work as well as moving it to the massively scalable compute farm.  <a href="http://blog.finette.com/2013/10/27/amazing-video-on-leadership/">This video on leadership</a> says the same thing, in terms of people: empowering the team makes for more brain power than bottlenecking the decisions and logic on one person.  Similarly, empowering other teams to update their automation at their own pace will scale much better than funneling all of those tasks into a single team.
+</p><p>
+We could potentially move towards a BYOS (bring your own script) model, since other teams know their workflow, their builds, their tests, their processes better than RelEng ever could.  <a href="http://atlee.ca/blog/">:catlee</a>'s been using the term Releng-as-a-Service for a while now.  I think it would scale.
+</p><p>
+I would want to allow for any arbitrary script to run on our compute farm (within the realms of operational-, security-, and fiscal- sanity, of course).  Comparing talos performance numbers looking for regressions?  Parsing logs for metrics? Trying to find patterns in support feedback? Have a whole new class of thing to automate? Run it on the compute farm.  We'll help you get started.  But first, we have to make it less expensive and complex to schedule arbitrary jobs.
+</p>
+</div><br />
+
+<p>
+This is largely what we talked about, on a high level, both during our team week and over the years.  A lot of this seems very blue sky.  But we're so much closer to this as a reality than we were when I was first brainstorming about replacing buildbot, 4-5 years ago.  We need to work towards this, in phases, while also keeping on top of the rest of our tasks.
+</p><p>
+In part 1, I covered <a href="http://escapewindow.dreamwidth.org/242767.html">where we are currently, and what needs to change to scale up</a>.<br />
+In part 3, I'm going to go into some hand-wavy LWR specifics, including what we can roll out in phase 1.<br />
+In part 4, I'm going to drill down into the dependency graph.<br />Then I'm going to start writing some code.
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=243117" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

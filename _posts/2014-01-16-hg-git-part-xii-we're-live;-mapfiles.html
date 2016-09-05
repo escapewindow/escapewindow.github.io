@@ -1,0 +1,31 @@
+---
+layout: post
+title: 'hg-git part xii: we''re live; mapfiles'
+---
+
+<p>
+This is a long overdue blost post to say that gecko-dev and gecko-projects are fully live and cut over (and renamed, for those who have been looking at the now-defunct links in my previous blog posts).
+</p><p>
+Gecko-dev is <a href="http://git.mozilla.org/?p=integration/gecko-dev.git;a=summary">on git.mozilla.org</a> and <a href="https://github.com/mozilla/gecko-dev">on github</a>; gecko-projects is <a href="https://github.com/mozilla/gecko-projects/">on github</a> only until it's clear that we won't need regular branch and repo resets.  We have retired the following github repos, which we will probably remove after a period of time:
+</p><ul><li>
+<a href="https://github.com/mozilla/mozilla-central">github/mozilla/mozilla-central</a>
+</li><li>
+<a href="https://github.com/mozilla/releases-mozilla-central">github/mozilla/releases-mozilla-central</a>
+</li><li>
+<a href="https://github.com/mozilla/releases-mozilla-aurora">github/mozilla/releases-mozilla-aurora</a>
+</li><li>
+<a href="https://github.com/mozilla/releases-mozilla-beta">github/mozilla/releases-mozilla-beta</a>
+</li><li>
+<a href="https://github.com/mozilla/releases-mozilla-release">github/mozilla/releases-mozilla-release</a>
+</li></ul><p>
+The mapfiles are still in <a href="http://people.mozilla.org/~asasaki/vcs2vcs/">http://people.mozilla.org/~asasaki/vcs2vcs/</a>, which is not the final location.  There's a <a href="http://people.mozilla.org/~asasaki/vcs2vcs/gecko-projects/combined_gecko_mapfile">combined mapfile</a> in here for convenience, but the <a href="http://people.mozilla.org/~asasaki/vcs2vcs/gecko-dev/gecko-mapfile">gecko-mapfile</a> is the canonical mapfile.
+</p><p>
+I've been working on a db-based mapper app, which, given a git or hg sha, would allow us to query for the corresponding sha.  It also allows for downloading the full mapfile for a repo (gecko.git, gecko-dev, gecko-projects) or the combined full mapfile of two or more of those repos.  It also allows for downloading the shas inserted since a particular datetime.  Screenshots of my development instance are <a href="http://people.mozilla.org/~asasaki/vcs-sync-preso/">here</a>.
+</p><p>
+Bear with me; I've got lots on my plate and not enough time.  Mapper is in the works, however, and I think this should smooth over some of the rough edges when dealing with both hg and git.
+Additional eyeballs and/or patience would be appreciated!
+</p><p>
+My db-based mapper repo is <a href="https://github.com/escapewindow/mapper/">here</a>.<br />
+The db-based mapper bug is <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=847640">here</a>.<br />
+The permanent upload location bug is <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=929336">here</a>.
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=244350" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

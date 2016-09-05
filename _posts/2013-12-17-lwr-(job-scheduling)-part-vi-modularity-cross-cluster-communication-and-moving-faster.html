@@ -1,0 +1,90 @@
+---
+layout: post
+title: 'LWR (job scheduling) part vi: modularity, cross-cluster communication, and
+  moving faster'
+---
+
+<blockquote style="background: #f9f9f9; margin: 1.5em 10px; padding: 0.5em 10px;">
+<font style="color: #ccc; content: open-quote; font-size: 10em; line-height: 0.1em; margin-right: 0.25em; vertical-align: -0.4em;">
+&#8220;
+</font>
+<a href="http://blog.izs.me/post/69091089622/the-hazards-of-consensus">The most long-term success tends to come from reducing, to the greatest extent possible, the need for agreement and consensus.</a>
+</blockquote><p>
+I think we could rephrase "reducing the need for agreement and consensus" as, "increasing our ability to agree-to-disagree and still work well together".  I'm going to talk a bit about modularity, forks, and shared APIs.
+</p><br />
+
+<a name="modularity"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>modularity</b>
+</p><p>
+Catlee was pushing for LWR modularity, to distance us from buildbot's monolithic app architecture.  I was as well, to a degree, with <a href="http://escapewindow.dreamwidth.org/243301.html#whiteboard_schematics">standalone clusters</a> and delegating pooling decisions to a <a href="http://escapewindow.dreamwidth.org/243301.html#slaveapi_mozpool_and_network_logging">SlaveAPI/Mozpool analog</a>.  If you take that a step further, you reach Catlee's view of it (as I understand it):
+</p><ul style="list-style-type: circle;"><li style="margin-bottom: 1em;">
+minion<a href="#minions"><sup>1</sup></a> allocation module: this could simply iterate down a list of minions for smaller clusters, or ask SlaveAPI/Mozpool for an appropriate minion in the gecko cluster.
+</li><li style="margin-bottom: 1em;">
+the job launching module could use sshd on the minion pool if the scripts have their own logging and bootstrapping; another version could talk to a custom minion-side daemon.
+</li><li style="margin-bottom: 1em;">
+The graph-generation and graph-processing pieces could be modular, allowing for different graph- and job- definition formats between clusters.
+</li><li style="margin-bottom: 1em;">
+the pending jobs piece, the graphs db + api piece, the event api, and configs pieces as well
+</li></ul><p>
+By making these modular, we reduce the monolithic app to compatible LEGO&reg; pieces that can be mixed and matched and forked if necessary.  Plus, it allows for easier development in parallel.
+</p><p>
+Similarly, we had been talking about versioning each API and the job- and graph- definitions, so we wouldn't always be locked in to being backwards-compatible.  That would allow us to make faster decisions early on that wouldn't necessarily have major long-term implications.  It's easier to fail early + fail often if decisions are easily reversible.
+</p><p>
+This versioning would also allow us to potentially have different workflows or job+graph definitions between LWR clusters, should we need it.  The only requirement here would be that each LWR cluster be internally consistent.  This could allow for simpler workflows to operate without the overhead of being fully compatible with a complex workflow; similarly, we wouldn't have to shoehorn a complex workflow onto a simpler one.
+</p>
+<hr align="left" width="100" />
+<p>
+<a name="minions"></a>
+<sup>1</sup> Earlier I mentioned that I (and others) wanted to <a href="http://escapewindow.dreamwidth.org/243301.html#slaveapi_mozpool_and_network_logging">move away from the buildbot master/slave terminology</a>.  I think we've settled on <i>minions</i> for the compute farm machines.  We're a bit mixed on the server side: Overlord? Professor? Mastermind?  I'd prefer to think of the server cluster as more of a traffic cop than anything overarchingly powerful and omniscient, but I'm not too picky here.
+</p>
+</div><br />
+
+<a name="cross_cluster_communication"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>cross-cluster communication</b>
+</p><p>
+As a bit of [additional] background: Catlee sees LWR as event-based.  We would define types of events, and what happens when an event occurs.  And I mentioned wanting to support <a href="http://escapewindow.dreamwidth.org/243472.html#graphs_of_graphs">graphs-of-graphs</a>, and hinted at potentially supporting cross-project or cross-corporation architectures <a href="http://escapewindow.dreamwidth.org/243117.html#community_job_status">here</a> and <a href="http://escapewindow.dreamwidth.org/207062.html#cutid4">here</a> <a href="#2009"><sup>2</sup></a>.
+</p><p>
+Why not allow LWR clusters to talk to each other?  They certainly would be able to, with events.  If events involve hitting a specific server on a specific port, that may be tricky if there's a firewall in the way, but that might be solvable with listeners on the DMZ.
+</p><p>
+Why not allow graphs-of-graphs to reference graphs in another LWR cluster?  (If that's feasible.) With this workflow, once the dependencies had all finished, we could trigger a subgraph on another LWR cluster, either via an event or directly in the graph API.
+</p><p>
+If we're able to read the other cluster's status and/or request a callback event at the end of that subgraph, this could work, and allow for loose coupling between related LWR clusters without requiring their internals be identical.
+</p>
+<hr align="left" width="100" />
+<p>
+<a name="2009"></a>
+<sup>2</sup>  While re-reading <a href="http://escapewindow.dreamwidth.org/207062.html#cutid4">this post</a>, I noticed that I was writing about next-gen, post-buildbot build infrastructure at Mozilla back in January 2009.  My picture back then was a lot more RDBMS- based then, but a lot of the concepts still hold.
+</p><p>
+We put that project on the back burner so we could help Mozilla launch a 1.0.  <i>Four</i> 1.0's (or equivalent: Maemo Fennec, Android Fennec, Android native Fennec, B2G) and nearly five years later, it looks like we're finally poised to tackle it, together.
+</p>
+</div><br />
+
+<a name="moving_faster"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>moving faster</b>
+</p><p>
+I tend to want to tackle the hardest piece of a problem first.  It's easier to keep the simpler problems in mind when designing solutions for the hardest problem, than vice versa.  In LWR's case, the hardest workflow is the existing Gecko builds and tests.
+</p><p>
+The initial LWR phase 1 may now involve a smaller scoped, Gaia-oriented, pull request autoland system.  This worried me: if I'm concerned about forward-compatibility with Gecko phase 1, will I be forced into a stop-energy role during the Gaia phase 1 brainstorming?  That sounds counterproductive for everyone involved.  That's until I realized <a href="#modularity">modularity</a> and <a href="#cross_cluster_communication">cross-cluster communication</a> could help us avoid requiring future-proof decisions at the outset.  If we don't have to worry that decisions made during phase 1 are irreversible, we'll be able to take more chances and move faster.
+</p><p>
+If we wanted the Gaia workflow to someday be a part of the Gecko dependency graphs, that can happen by either moving those jobs into the Gecko LWR cluster, or we could have the Gecko cluster drive the Gaia cluster.
+</p><p>
+Forked LWR clusters aren't ideal.  But blocking Gaia LWR progress on hand-wavy ideas of what Gecko <i>might</i> need in the future isn't helpful. The option of avoiding the tyranny of a single shared workflow or manifest definition frees us to brainstorm the best solution for each, and converge later if it makes sense.
+</p>
+</div><br />
+
+<p>
+</p><br /><p>
+In part 1, I covered <a href="http://escapewindow.dreamwidth.org/242767.html">where we are currently, and what needs to change to scale up</a>.<br />
+In part 2, I covered <a href="http://escapewindow.dreamwidth.org/243117.html">a high level overview of LWR</a>.<br />
+In part 3, I covered <a href="http://escapewindow.dreamwidth.org/243301.html">some hand-wavy LWR specifics, including what we can roll out in phase 1</a>.<br />
+In part 4, I <a href="http://escapewindow.dreamwidth.org/243472.html">drilled down into the dependency graph</a>.<br />
+In part 5, I covered <a href="http://escapewindow.dreamwidth.org/243887.html">some thoughts on the jobs and graphs db</a>.<br />
+We met with the A-team about this, a couple times, and are planning on working on this together!<br />
+Now I'm going to take care of some vcs-sync tasks, prep for our next meeting, and start writing some code.<br />
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=244185" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments

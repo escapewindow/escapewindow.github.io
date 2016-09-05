@@ -1,0 +1,207 @@
+---
+layout: post
+title: 'LWR (job scheduling) part iv: drilling down into the dependency graph'
+---
+
+<p>
+I already wrote a bit about the dependency graph <a href="http://escapewindow.dreamwidth.org/243117.html#dependency_graph">here</a>, and <a href="http://atlee.ca/blog/">:catlee</a> wrote about it <a href="http://atlee.ca/blog/posts/next-gen-job-scheduling.html">here</a>.  While I was writing part 2, it became clear that
+</p><ol style="list-style-type: lower-alpha;"><li>
+I had a lot more ideas about the dependency graph, enough for its own blog post, and
+</li><li>
+since I want to tackle writing the dependency graph first, solidifying my ideas about it beforehand would be beneficial to writing it.
+</li></ol><p>
+I've been futzing around with <a href="http://graphviz.org/">graphviz</a> with <a href="http://dtor.com/halfire/">:hwine</a>'s help.  Not half as much fun as <a href="http://oduinn.com/blog/2009/02/20/thank-you-for-the-open-design-lunch/">drawings on napkins</a>, but hopefully they make sense.  I'm still thinking things through.
+</p><br />
+
+<a name="jobs_and_graphs"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>jobs and graphs</b>
+</p><p>
+A quick look at <a href="https://tbpl.mozilla.org/">TBPL</a> was enough to convince me that the dependency graph would be complex enough just describing the relationships between jobs.  The job details should be separate.  Per-checkin, nightly, and periodic-PGO dependency graphs trigger overlapping sets of jobs, so avoiding duplicate job definitions is a plus.
+</p><p>
+We'll need to submit both the dependency graph and the associated job definitions to LWR together.  More on how I think jobs and graphs could work in the db <strike>below</strike> in part 5.
+</p><p>
+For phase 1, I think job definitions will only cover enough to feed into buildbot and have them work.
+</p>
+</div><br />
+
+<a name="dummy_jobs"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>dummy jobs</b>
+</p><ul style="list-style-type: circle;"><li style="margin-bottom: 1em;">
+In my initial <a href="http://escapewindow.dreamwidth.org/243117.html#dependency_graph">dependency graph</a> thoughts, I mentioned <b>breakpoint jobs</b> as a throwaway idea, but it's stuck with me.
+<br /><br />
+We could use these at the beginning of graphs that we want to view or edit in the web app before proceeding.  Or if we submit an experimental patch to Try and want to verify the results after a specific job or set of jobs before proceeding further.  Or if we want to represent QA signoff in a release graph, and allow them to continue the release via the web app.
+<br /><br />
+I imagine we would want a request timeout on this breakpoint, after which it's marked as timed out, and all child jobs are skipped.  I imagine we'd also want to set an ACL on at least a subset of these, to limit who can sign off on releases.
+<br /><br />
+Also in releases, we have simple <b>notification jobs</b> that send email when the release has passed certain milestones.  We could later potentially support IRC pings and bug comments.
+<br /><br />
+A highly simplified representation of part of a release:
+<br /><br />
+<center><a href="http://darksecretlove.com/images/lj/2013/lwr_dummy.svg"><img src="http://darksecretlove.com/images/lj/2013/lwr_dummy.png" /></a></center>
+<br /><br />
+We currently continue the release via manual Release Engineering intervention, after we see an email "go".  It would be great to represent it in the dependency graph and give the correct group of people access.  Less RelEng bottleneck.
+</li><li style="margin-bottom: 1em;">
+We could also have <b>timer jobs</b> that pause the graph until either cancelled or the timeout is hit.  So if you want this graph to run at 7pm PST, you could schedule the graph with an initial timer job that marks itself successful at 7, triggering the next steps in the graph.
+</li><li style="margin-bottom: 1em;">
+In buildbot, we currently have a <a href="http://hg.mozilla.org/build/buildbotcustom/file/c61cc0ea7fb8/process/factory.py#l94">dummy factory</a> that sleeps 5 and exits successfully.  We used this <a href="https://wiki.mozilla.org/Releases/Firefox_3.0.16/BuildNotes#Tag_2">back in the dark ages</a> to skip certain jobs in a release, since we could only restart the release from the beginning; by replacing long-running jobs with dummy jobs, we could start at the beginning and still skip the previously successful portions of the release.
+<br /><br />
+We could use <b>dummy jobs</b> to:
+<br /><br /><ol style="list-style-type: lower-alpha;"><li style="margin-bottom: 1em;">
+simplify the relationships between jobs.  In the above graph, we avoided a many-to-many relationship by inserting a notification job in between the linux jobs and the updates.
+</li><li style="margin-bottom: 1em;">
+trigger when certain groups of jobs finish (e.g. all linux64 mochitests), so downstream jobs can watch for the dummy job in Pulse rather than having to know how many chunks of mochitests we expect to run, and keep track as each one finishes.
+</li><li style="margin-bottom: 1em;">
+quickly test dependency graph processing: instead of waiting for a full build or test, replace it with a dummy job.  For instance, we could set all the jobs of a type to "success" except one "timed out; retry" to test max retry limits quickly.  This assumes we can set custom exit statuses for each dummy job, as well as potentially pointing at pre-existing <a href="http://escapewindow.dreamwidth.org/243301.html#artifact_manifests">artifact manifest</a> URLs for downstream jobs to reference.
+</li></ol></li></ul><p>
+Looking at this list, it appears to me that timer and breakpoint jobs are pretty close in functionality, as are notification and dummy (status?) jobs.  We might be able to define these in one or two job types.  And these jobs seem simple enough that they may be runnable on the graph processing pool, rather than calling out to <a href="http://escapewindow.dreamwidth.org/243301.html#slaveapi_mozpool_and_network_logging">SlaveAPI/MozPool</a> for a new node to spawn a script on.
+</p>
+</div><br />
+
+<a name="statuses"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>statuses</b>
+</p><p>
+At first glance, it's probably easiest to reuse the <a href="http://hg.mozilla.org/build/mozharness/file/0f6df7ad59fc/mozharness/mozilla/buildbot.py#l33">set of TBPL statuses</a>: success, warning, failure, exception, retry.  But there are also the grey statuses 'pending' and 'running'; the pink status 'cancelled'; and the statuses 'timed out', and 'interrupted' which are subsets of the first five statuses.
+</p><p>
+Some statuses I've brainstormed:
+</p><ul style="list-style-type: circle;"><li>
+inactive (skipped during scheduling)
+</li><li>
+request cancelled
+</li><li>
+pending blocked by dependencies
+</li><li>
+pending blocked by infrastructure limits
+</li><li>
+skipped due to coalescing
+</li><li>
+skipped due to dependencies
+</li><li>
+request timed out
+</li><li>
+running
+</li><li>
+interrupted due to user request
+</li><li>
+interrupted due to network/infrastructure/spot instance interrupt
+</li><li>
+interrupted due to max runtime timeout
+</li><li>
+interrupted due to idle time timeout (no output for x seconds)
+</li><li>
+completed successful
+</li><li>
+completed warnings
+</li><li>
+completed failure
+</li><li>
+retried (auto)
+</li><li>
+retried (user request)
+</li></ul><p>
+The "completed warnings" and "completed failure" statuses could be split further into "with crash", "with memory leak", "with compilation error", etc., which could be useful to specify, but are job-type-specific.
+</p><p>
+If we continue as we have been, some of these statuses are only detectable by log parsing.  Differentiating these statuses allows us to act on them in a programmatic fashion.  We do have to strike a balance, however.  Adding more statuses to the list later might force us to revisit all of our job dependencies to ensure the right behavior with each new status.  Specifying non-useful statuses at the outset can lead to unneeded complexity and cruft.  Perhaps 'state' could be separated from 'status', where 'state' is in the set ('inactive', 'pending', 'running', 'interrupted', 'completed'); we could also separate 'reasons' and 'comments' from 'status'.
+</p><p>
+Timeouts are split into request timeouts or runtime timeouts (idle timeouts, max job runtime timeouts).  If we hit a request timeout, I imagine the job would be marked as 'skipped'. I also imagine we could mark it as 'skipped successful' or 'skipped failure' depending on configuration: the former would work for <a href="#dummy_jobs">timer jobs</a>, especially if the request timeout could be specified by absolute clock time in addition to relative seconds elapsed.  I also think both graphs and jobs could have request timeouts.
+</p><p>
+I'm not entirely sure how to coalesce jobs in LWR, or if we want to.  Maybe we leave that to graph and job prioritization, combined with request timeouts.  If we did coalesce jobs, that would probably happen in the graph processing pool.
+</p><p>
+For retries, we need to track max [auto] retries, as well as job statuses per run.  I'm going to go deeper into this <strike>below</strike> in part 5.
+</p>
+</div><br />
+
+<a name="relationships"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>relationships</b>
+</p><p>
+For the most part, I think relationships between jobs can be shown by the following flowchart:
+</p>
+<center>
+<a href="http://darksecretlove.com/images/lj/2013/lwr_dependencies.svg"><img src="http://darksecretlove.com/images/lj/2013/lwr_dependencies.png" /></a><br />
+</center>
+<p>
+If we mark job 2 as skipped-due-to-dependencies, we need to deal with that somehow if we retrigger job 1.  I'm not sure if that means we mark job 2 as "pending-blocked-by-dependencies" if we retrigger job 1, or if the graph processing pool revisits skipped-due-to-dependencies jobs after retriggered jobs finish.  I'm going to explore this more in part 5, though I'm not sure I'll have a definitive answer there either.
+</p><p>
+It should be possible, at some point, to block the next job until we see a specific job status:
+</p><ul style="list-style-type: circle;"><li>
+don't run until this dependency is finished/cancelled/timed out
+</li><li>
+don't run unless the dependency is finished and marked as failure
+</li><li>
+don't run unless the dependency is finished and there's a memory leak or crash
+</li></ul><p>
+For the most part, we should be able to define all of our dependencies with this type of relationship: block this job on (job X<sub>1</sub> status Y<sub>1</sub>, job X<sub>2</sub> status Y<sub>2</sub>, ...).  A request timeout with a predefined behavior-on-expiration would be the final piece.
+</p><p>
+I could potentially see more powerful commands, like "cancel the rest of the [downstream?] jobs in this graph", or "retrigger this other job in the graph", or "increase the request timeout for this other job", being potentially useful.  Perhaps we could add those to <strike>dummy</strike> status jobs.  I could also see them significantly increasing the complexity of graphs, including the potential for infinite recursion in some constructs.
+</p><p>
+I think I should mark any ideas that potentially introduce too much complexity as out of scope for phase 1.
+</p>
+</div><br />
+
+<a name="branch_specific_definitions"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>branch specific definitions</b>
+</p><p>
+Since job and graph definitions will be in-tree, riding the trains, we need some branch-specific definitions. Is this a PGO branch? Are nightlies enabled on this branch? Are all products and platforms enabled on this branch?
+</p><p>
+This branch definition config file could also point at a revision in a separate, standalone repo for its dependency graph + job definitions, so we can easily refer to different sets of graph and job definitions by SHA.  I'm going to explore that further in part 5.
+</p><p>
+I worry about branch merges overwriting branch-specific configs.  The inbound and project branches have different branch configs than mozilla-central, so it's definitely possible.  I think the solution here is a generic branch-level config, and an optional branch-named file.  If that branch-named file doesn't exist, use the generic default. (e.g. generic.json, mozilla-inbound.json)  I know others disagree with me here, but I feel pretty strongly that human decisions need to be reduced or removed at merge time.
+</p>
+</div><br />
+
+<a name="graphs_of_graphs"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>graphs of graphs</b>
+</p><p>
+I think we need to support graphs-of-graphs.  B2G jobs are completely separate from Firefox desktop or Fennec jobs; they only start with a common trigger.  Similarly, win32 desktop jobs have no real dependencies on macosx desktop jobs.  However, it's useful to refer to them as a single set of jobs, so if graphs can include other graphs, we could create a superset graph that includes the appropriate product- and platform- specific graphs, and trigger that.
+</p><p>
+If we have PGO jobs defined in their own graph, we could potentially include it in the per-checkin graph with a branch config check.  On a per-checkin-PGO branch, the PGO graph would be included and enabled in the per-checkin graph.  Otherwise, the PGO graph would be included, but marked as inactive; we could then trigger those jobs as needed via the web app.  (On a periodic-PGO branch, a periodic scheduler could submit an enabled PGO graph, separate from the per-checkin graph.)
+</p><p>
+It's not immediately clear to me if we'll be able to depend on a specific job in a subgraph, or if we'll only be able to depend on the entire subgraph finishing.  (For example: can an external graph depend on the linux32 mochitest-2 job finishing, or would it need to wait until all linux32 jobs finish?)  Maybe named dummy status jobs will help here: <code>graph1.start</code>, <code>graph1.end</code>, <code>graph1.builds_finished</code>, etc.  Maybe I'm overthinking things again.
+</p><p>
+We need a balancing act between ease of reading and ease of writing; ease of use and ease of maintenance.  We've seen the mess a strong imbalance can cause, in our own buildbot configs.  The fact that we're planning on making the final graph easily viewable and testable without any infrastructure dependencies helps, in this regard.
+</p>
+</div><br />
+
+<a name="graphbuilder.py"></a>
+<div style="border: thin solid #003300; padding: 1em;">
+<p>
+<b>graphbuilder.py</b>
+</p><p>
+I think <code>graphbuilder.py</code>, our [to be written] dependency graph generator, may need to cover several use cases:
+</p><ul style="list-style-type: circle;"><li style="margin-bottom: 1em;">
+Create a graph in an api-submittable format.  This may be all we do in phase 1, but the others are tempting...
+</li><li style="margin-bottom: 1em;">
+Combine graphs as needed, with branch-specific definitions, and user customizations (think TryChooser and per-product builds).
+</li><li style="margin-bottom: 1em;">
+Verify that this is a well-formed graph.
+</li><li style="margin-bottom: 1em;">
+Run other graph unit tests, as needed.
+</li><li style="margin-bottom: 1em;">
+Potentially output graphviz files for user-friendly local graph visualization?
+</li><li style="margin-bottom: 1em;">
+It's unclear if we want it to also do the graph+job submitting to the api.
+</li></ul><p>
+I think the per-checkin graph would be good to build first; the nightly and PGO graphs, as well as the branch-specific defines, might also be nice to have in phase 1.
+</p>
+</div><br />
+
+<p>
+I have 4 more sections I wrote skeletons for. Since those sections are more db-oriented, I'm going to move those into a part 5.
+</p><br /><p>
+In part 1, I covered <a href="http://escapewindow.dreamwidth.org/242767.html">where we are currently, and what needs to change to scale up</a>.<br />
+In part 2, I covered <a href="http://escapewindow.dreamwidth.org/243117.html">a high level overview of LWR</a>.<br />
+In part 3, I covered <a href="http://escapewindow.dreamwidth.org/243301.html">some hand-wavy LWR specifics, including what we can roll out in phase 1</a>.<br />
+In part 5, I'm going to cover some dependency graph db specifics.<br />
+Now I'm going to meet with the A-team about this, take care of some vcs-sync tasks, and start writing some code.<br />
+</p><br /><br /><img src="http://www.dreamwidth.org/tools/commentcount?user=escapewindow&ditemid=243472" width="30" height="12" alt="comment count unavailable" style="vertical-align: middle;"/> comments
