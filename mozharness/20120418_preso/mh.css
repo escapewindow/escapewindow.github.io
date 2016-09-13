@@ -1,0 +1,49 @@
+p, ul, ol, li, blockquote, td, body, table, h1, h5, dl, dt, dd, .sansserif, th
+{
+    font-family: helvetica,sans-serif;
+}
+
+li
+{
+    padding-top: .9em;
+    padding-bottom: .3em;
+}
+
+li.monospace
+{
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+body
+{
+    padding: 5em;
+}
+
+ul
+{
+    list-style-type: circle;
+}
+
+ul > li > ul
+{
+    list-style-type: disc;
+}
+
+ol > li > ol
+{
+    list-style-type: lower-alpha;
+}
+
+blockquote:before, blockquote:after {
+color: #69c;
+display: block;
+font-size: 700%;
+width: 50px;
+}
+
+blockquote:before {
+content: '\201C';
+height: 0;
+margin-left: -0.55em;
+}

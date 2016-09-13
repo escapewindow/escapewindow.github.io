@@ -1,0 +1,50 @@
+<html><head>
+<link rel="stylesheet" href="mh.css" type="text/css"/>
+</head><body>
+
+<ul>
+<h3>Logging</h3>
+
+<ul>
+<blockquote><pre>
+18:56:22     INFO - Testing /src/talosrunner/hg-mozharness/scripts/../configs/single_locale/staging_release_mozilla-release_android.py.
+18:56:22     INFO - Good.
+18:56:22     INFO - Testing /src/talosrunner/hg-mozharness/scripts/../configs/test/test.py.
+18:56:22     INFO - Good.
+18:56:22     INFO - 22 of 22 python config files were good.
+18:56:22     INFO - #####
+18:56:22     INFO - ##### ConfigTest summary:
+18:56:22     INFO - #####
+18:56:22     INFO - 22 of 22 json config files were good.
+18:56:22     INFO - 22 of 22 python config files were good.
+18:56:22     INFO - Copying logs to upload dir...
+18:56:22     INFO - mkdir: /src/talosrunner/hg-mozharness/build/upload/logs
+</pre></blockquote>
+
+<li>
+Timestamps, to determine how long each individual portion is taking.
+</li><ul><li>
+Help track down timeouts + other problems.
+</li></ul><li>
+Built-in python <code>logging</code> hooks to encourage use.
+</li><li>
+Wrapper methods to log things that usually happen silently.
+</li><li>
+Helpful error messages vs. exceptions.
+</li><li>
+End-of-job summaries.
+</li><li>
+<code>OutputParser</code> for <code>BaseScript.run_command()</code>.
+</li><ul><li>
+Detect errors via substring, regex, return status.
+</li></ul></ul>
+
+<p>
+The goal here is for someone reading the log to know enough of what's going on to be able to debug problems intelligently.
+</p>
+
+<p>
+<a href="05-actions.html">actions --&gt;</a><br />
+</p>
+
+</body></html>

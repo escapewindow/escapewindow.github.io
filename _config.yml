@@ -8,6 +8,9 @@ url: "https://escapewindow.github.io" # the base hostname & protocol for your si
 twitter_username: escapewindow
 github_username:  escapewindow
 
+disqus:
+  shortname: escapewindow
+
 # Build settings
 markdown: kramdown
 theme: minima

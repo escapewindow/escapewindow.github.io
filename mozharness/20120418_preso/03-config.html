@@ -1,0 +1,73 @@
+<html><head>
+<link rel="stylesheet" href="mh.css" type="text/css"/>
+</head><body>
+
+<ul>
+<h3>Config</h3>
+
+<div style="padding: 1em; border: thin solid #990000;">
+<p>
+Approach 1: hardcode everything in a script.
+</p><ul><li class="monospace">
+Runs great for the user/environment/problem it's written for.
+</li><li class="monospace">
+For everything else, edit the file.
+</li><li class="monospace">
+If you find yourself to use the script for another purpose on a regular basis, fork it.
+</li><br /><li class="monospace">
+Pros: Quick.
+</li><li class="monospace">
+Cons: Lots of duplicated code, hard to figure out how to edit.
+</li></ul></div><br />
+<div style="padding: 1em; border: thin solid #009900;">
+<p>
+Approach 2: use command line options for everything overrideable.
+</p><ul><li class="monospace">
+Pros: Allows for a limited amount of configuration overrides. Preferable to (1)
+</li><li class="monospace">
+Cons: As the argument list approaches ARG_MAX, usage complexity increases.  Sharing command line arguments can be problematic.<br />
+</li></ul></div><br />
+<div style="padding: 1em; border: thin solid #000099;">
+<p>
+Approach 3: use a config file for everything overrideable.
+</p><ul><li>
+Pros: Allows for more complex configuration than (2).<br />
+Cons: Running with a small change requires an edit or a config file fork.
+</li></ul></p></div><br />
+<div style="padding: 1em; border: thin solid #000000;">
+<p>
+Mozharness creates a config dictionary by:
+</p>
+<ol><li>
+OptParse defaults.
+</li><li>
+Overlay initial config (optional).
+</li><li>
+Overlay <code>--config-file FILE</code> contents (optional but can be marked as mandatory per-script).
+</li><li>
+Overlay command line options.
+</li><li>
+Lock self.config (ReadOnlyDict).
+</li><li>
+Dump self.config to console, log, and localconfig.json
+</li></ol>
+<br />
+<ul>
+<li class="monospace">
+Pros: If done properly, this can give the pros from (1-3) without the cons.
+</li><li class="monospace">
+Cons: Learning curve for developers + users.
+</li></ul>
+</div><br />
+
+<ul><li>
+<a href="http://hg.mozilla.org/build/mozharness/file/dd81d754a7fd/configs/multi_locale">multilocale configs</a>
+</li><li>
+<a href="http://hg.mozilla.org/build/mozharness/file/dd81d754a7fd/configs/single_locale">single locale configs</a>
+</li></ul>
+
+<p>
+<a href="04-logging.html">logging --&gt;</a><br />
+</p>
+
+</body></html>
