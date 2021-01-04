@@ -259,7 +259,6 @@ PLATFORMS
 DEPENDENCIES
   github-pages
   jekyll (>= 3.6.3)
-  minima
 
 RUBY VERSION
    ruby 2.6.3p62
