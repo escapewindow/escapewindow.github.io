@@ -46,7 +46,7 @@ SSLVerifySignedServerKeyExchange(SSLContext *ctx, bool isRsa, SSLBuffer signedPa
     if ((err = SSLHashSHA1.update(&amp;hashCtx, &amp;serverRandom)) != 0)
         goto fail;
     if ((err = SSLHashSHA1.update(&amp;hashCtx, &amp;signedParams)) != 0)
-<div style="background: #FFE0E0">        goto fail;
+<div style="background: #662020">        goto fail;
         goto fail;</div>
     if ((err = SSLHashSHA1.final(&amp;hashCtx, &amp;hashOut)) != 0)
         goto fail;
