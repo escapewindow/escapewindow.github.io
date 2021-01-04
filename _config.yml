@@ -9,7 +9,7 @@ url: "https://escapewindow.com" # the base hostname & protocol for your site
 disqus:
   shortname: escapewindow
 
-limit_posts: 5
+#limit_posts: 5
 
 # Build settings
 markdown: kramdown
