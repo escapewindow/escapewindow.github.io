@@ -1,8 +1,10 @@
 ---
 layout: default
+title: Escape(Window) - links
+permalink: /links/
 ---
 
-## About
+## Links
 
 - [Twitter](https://twitter.com/escapewindow/)
 - [LinkedIn](https://www.linkedin.com/in/aki-sasaki-57b637/)
